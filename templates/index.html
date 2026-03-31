@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XML Auditor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1a1a1a;
+    --surface: #242424;
+    --surface2: #2e2e2e;
+    --border: #383838;
+    --text: #e0e0e0;
+    --text-dim: #888;
+    --accent: #5b8dd9;
+    --accent-hover: #4a7bc8;
+    --warn: #d4a017;
+    --error: #c0392b;
+    --ok: #27ae60;
+    --mono: "Consolas", "Fira Mono", "Courier New", monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header h1 { font-size: 15px; font-weight: 700; letter-spacing: 0.05em; color: var(--accent); }
+  header span { color: var(--text-dim); font-size: 11px; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .panel-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  .input-row { display: flex; gap: 8px; align-items: flex-start; }
+  .input-row input[type="text"], .input-row textarea {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 7px 10px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .input-row input[type="text"]:focus,
+  .input-row textarea:focus { border-color: var(--accent); }
+
+  textarea { resize: vertical; min-height: 100px; }
+
+  .toggle-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .toggle-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .toggle-btn.active {
+    background: var(--surface2);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  button.btn {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    padding: 7px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button.btn:hover { background: var(--accent-hover); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.btn-sm {
+    padding: 3px 10px;
+    font-size: 11px;
+  }
+  button.btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  button.btn-ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
+
+  /* Parent chips */
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 3px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Field map grid */
+  .field-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .field-group label {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .field-group select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 5px 8px;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+  }
+  .field-group select:focus { border-color: var(--accent); }
+
+  /* Cards grid */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+    gap: 14px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 12px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .card-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+  }
+  .card-meta { font-size: 10px; color: var(--text-dim); }
+
+  .card-body { padding: 10px 12px; }
+
+  /* Stat card */
+  .stat-value {
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+  }
+  .stat-label { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th {
+    text-align: left;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 3px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  td.num { text-align: right; color: var(--accent); }
+  td.dim { color: var(--text-dim); }
+
+  /* QA panel */
+  .qa-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .qa-row:last-child { border-bottom: none; }
+  .severity-warn { color: var(--warn); font-size: 10px; text-transform: uppercase; font-weight: 700; min-width: 36px; }
+  .severity-error { color: var(--error); font-size: 10px; text-transform: uppercase; font-weight: 700; min-width: 36px; }
+  .qa-action { color: var(--text-dim); font-size: 11px; margin-top: 2px; padding-left: 44px; }
+
+  .confidence-bar-wrap { margin-bottom: 12px; }
+  .confidence-label { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+  .confidence-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--surface2);
+    overflow: hidden;
+  }
+  .confidence-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+
+  /* Errors */
+  .error-box {
+    background: #2d1a1a;
+    border: 1px solid var(--error);
+    border-radius: 3px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: #e07070;
+  }
+
+  /* Status */
+  .status-line { font-size: 11px; color: var(--text-dim); padding: 4px 0; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>XML Auditor</h1>
+  <span>Job feed analysis tool</span>
+</header>
+
+<main>
+
+  <!-- Step 1: Input -->
+  <div class="panel" id="panel-input">
+    <div class="panel-title">Step 1 — Feed Input</div>
+    <div class="toggle-row">
+      <button class="toggle-btn active" id="btn-url-mode" onclick="setMode('url')">URL</button>
+      <button class="toggle-btn" id="btn-paste-mode" onclick="setMode('paste')">Paste XML</button>
+    </div>
+    <div id="url-input-row" class="input-row">
+      <input type="text" id="feed-url" placeholder="https://partner.com/feed.xml" autocomplete="off" />
+      <button class="btn" onclick="probeFeed()">Probe Feed</button>
+    </div>
+    <div id="paste-input-row" class="input-row hidden">
+      <textarea id="feed-paste" placeholder="Paste XML here..."></textarea>
+      <button class="btn" onclick="probeFeed()">Probe Feed</button>
+    </div>
+    <div id="probe-status" class="status-line"></div>
+  </div>
+
+  <!-- Step 2: Configure -->
+  <div class="panel hidden" id="panel-config">
+    <div class="panel-title">Step 2 — Configure Analysis</div>
+
+    <div id="probe-errors"></div>
+
+    <div style="margin-bottom:10px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px;">Parent Node</div>
+      <div class="chip-row" id="parent-chips"></div>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:8px;">Field Mapping</div>
+      <div class="field-grid">
+        <div class="field-group">
+          <label>Title field</label>
+          <select id="map-title"><option value="">— none —</option></select>
+        </div>
+        <div class="field-group">
+          <label>Company field</label>
+          <select id="map-company"><option value="">— none —</option></select>
+        </div>
+        <div class="field-group">
+          <label>CPC field</label>
+          <select id="map-cpc"><option value="">— none —</option></select>
+        </div>
+        <div class="field-group">
+          <label>CPA field</label>
+          <select id="map-cpa"><option value="">— none —</option></select>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn" id="btn-analyze" onclick="runAnalysis()" disabled>Run Analysis</button>
+    <span id="analyze-status" class="status-line" style="display:inline-block;margin-left:10px;"></span>
+  </div>
+
+  <!-- Step 3: Results -->
+  <div class="hidden" id="panel-results">
+    <!-- QA Summary -->
+    <div class="panel" id="qa-panel"></div>
+
+    <!-- Cards -->
+    <div class="cards-grid" id="cards-grid"></div>
+  </div>
+
+</main>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let inputMode = 'url';
+let selectedParent = null;
+let probeData = null;
+let lastInputPayload = null; // {url?, xml_text?}
+
+const TITLE_ALIASES = ['title','job_title','jobtitle','position','job_name'];
+const COMPANY_ALIASES = ['company','advertiser','employer','employer_name','client'];
+const CPC_ALIASES = ['cpc','bid','cpc_value','cost_per_click','price'];
+const CPA_ALIASES = ['cpa','revenue','cpa_value','cost_per_apply','conversion_value'];
+
+// ---------------------------------------------------------------------------
+// Mode toggle
+// ---------------------------------------------------------------------------
+function setMode(mode) {
+  inputMode = mode;
+  document.getElementById('url-input-row').classList.toggle('hidden', mode !== 'url');
+  document.getElementById('paste-input-row').classList.toggle('hidden', mode !== 'paste');
+  document.getElementById('btn-url-mode').classList.toggle('active', mode === 'url');
+  document.getElementById('btn-paste-mode').classList.toggle('active', mode === 'paste');
+}
+
+// ---------------------------------------------------------------------------
+// Step 1: Probe
+// ---------------------------------------------------------------------------
+async function probeFeed() {
+  const url = inputMode === 'url' ? document.getElementById('feed-url').value.trim() : null;
+  const xml_text = inputMode === 'paste' ? document.getElementById('feed-paste').value.trim() : null;
+
+  if (!url && !xml_text) {
+    setProbeStatus('Provide a URL or paste XML first.');
+    return;
+  }
+
+  lastInputPayload = url ? {url} : {xml_text};
+  setProbeStatus('Probing…');
+
+  try {
+    const resp = await fetch('/api/probe', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(lastInputPayload),
+    });
+    const data = await resp.json();
+    probeData = data;
+    setProbeStatus('');
+    renderProbeResult(data);
+  } catch(e) {
+    setProbeStatus('Error: ' + e.message);
+  }
+}
+
+function setProbeStatus(msg) {
+  document.getElementById('probe-status').textContent = msg;
+}
+
+function renderProbeResult(data) {
+  // Show config panel
+  document.getElementById('panel-config').classList.remove('hidden');
+  document.getElementById('panel-results').classList.add('hidden');
+
+  // Errors
+  const errBox = document.getElementById('probe-errors');
+  errBox.innerHTML = '';
+  if (data.errors && data.errors.length) {
+    const box = document.createElement('div');
+    box.className = 'error-box';
+    box.textContent = data.errors.map(e => `[${e.agent}] ${e.message}`).join('\n');
+    errBox.appendChild(box);
+  }
+
+  // Parent chips
+  const chipRow = document.getElementById('parent-chips');
+  chipRow.innerHTML = '';
+  selectedParent = null;
+
+  const candidates = data.parent_candidates || {};
+  const sorted = Object.entries(candidates).sort((a,b) => b[1]-a[1]);
+
+  sorted.forEach(([tag, count]) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = `${tag} (${count.toLocaleString()})`;
+    chip.dataset.tag = tag;
+    chip.onclick = () => selectParent(tag, chip);
+    chipRow.appendChild(chip);
+  });
+
+  // Auto-select first candidate
+  if (sorted.length) {
+    const firstChip = chipRow.querySelector('.chip');
+    selectParent(sorted[0][0], firstChip);
+  }
+
+  // Field mapping dropdowns
+  const fieldTags = Object.keys(data.field_candidates || {});
+  populateDropdown('map-title', fieldTags, TITLE_ALIASES);
+  populateDropdown('map-company', fieldTags, COMPANY_ALIASES);
+  populateDropdown('map-cpc', fieldTags, CPC_ALIASES);
+  populateDropdown('map-cpa', fieldTags, CPA_ALIASES);
+
+  // Info line
+  const gzip = data.is_gzip ? ' (gzip)' : '';
+  setProbeStatus(`root: <${data.root_tag}>${gzip} · ${sorted.length} parent candidate(s) · ${fieldTags.length} field(s)`);
+}
+
+function selectParent(tag, chipEl) {
+  selectedParent = tag;
+  document.querySelectorAll('#parent-chips .chip').forEach(c => c.classList.remove('selected'));
+  if (chipEl) chipEl.classList.add('selected');
+  document.getElementById('btn-analyze').disabled = false;
+}
+
+function populateDropdown(selectId, tags, aliases) {
+  const sel = document.getElementById(selectId);
+  sel.innerHTML = '<option value="">— none —</option>';
+  tags.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t;
+    opt.textContent = t;
+    sel.appendChild(opt);
+  });
+  // Auto-match
+  const match = aliases.find(a => tags.some(t => t.toLowerCase() === a.toLowerCase()));
+  if (match) {
+    const found = tags.find(t => t.toLowerCase() === match.toLowerCase());
+    if (found) sel.value = found;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 2: Analyze
+// ---------------------------------------------------------------------------
+async function runAnalysis() {
+  if (!selectedParent) return;
+
+  const field_map = {
+    title: document.getElementById('map-title').value || null,
+    company: document.getElementById('map-company').value || null,
+    cpc: document.getElementById('map-cpc').value || null,
+    cpa: document.getElementById('map-cpa').value || null,
+  };
+
+  document.getElementById('analyze-status').textContent = 'Analyzing…';
+  document.getElementById('btn-analyze').disabled = true;
+  document.getElementById('panel-results').classList.add('hidden');
+  document.getElementById('cards-grid').innerHTML = '';
+  document.getElementById('qa-panel').innerHTML = '';
+
+  try {
+    const body = Object.assign({}, lastInputPayload, {parent_tag: selectedParent, field_map});
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+
+    document.getElementById('analyze-status').textContent = '';
+    document.getElementById('btn-analyze').disabled = false;
+    document.getElementById('panel-results').classList.remove('hidden');
+
+    renderQA(data);
+    renderCards(data.cards || {});
+  } catch(e) {
+    document.getElementById('analyze-status').textContent = 'Error: ' + e.message;
+    document.getElementById('btn-analyze').disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// QA rendering
+// ---------------------------------------------------------------------------
+function renderQA(data) {
+  const panel = document.getElementById('qa-panel');
+  const confidence = data.confidence != null ? data.confidence : 1.0;
+  const passed = data.qa_passed;
+  const pct = Math.round(confidence * 100);
+  const barColor = confidence >= 0.7 ? 'var(--ok)' : confidence >= 0.5 ? 'var(--warn)' : 'var(--error)';
+
+  let html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="panel-title" style="margin-bottom:0;">QA Summary</div>
+      <div style="font-size:11px;color:${passed ? 'var(--ok)' : 'var(--error)'}">
+        ${passed ? '✓ PASSED' : '✗ FAILED'}
+      </div>
+    </div>
+    <div class="confidence-bar-wrap">
+      <div class="confidence-label">Confidence: ${pct}%</div>
+      <div class="confidence-bar">
+        <div class="confidence-fill" style="width:${pct}%;background:${barColor};"></div>
+      </div>
+    </div>
+  `;
+
+  const flags = data.qa_flags || [];
+  if (flags.length === 0) {
+    html += '<div style="color:var(--ok);font-size:12px;">No issues detected.</div>';
+  } else {
+    flags.forEach(f => {
+      html += `
+        <div class="qa-row">
+          <span class="severity-${f.severity}">${f.severity}</span>
+          <span>${escHtml(f.issue)}</span>
+        </div>
+        ${f.suggested_action ? `<div class="qa-action">↳ ${escHtml(f.suggested_action)}</div>` : ''}
+      `;
+    });
+  }
+
+  panel.innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Cards rendering
+// ---------------------------------------------------------------------------
+function renderCards(cards) {
+  const grid = document.getElementById('cards-grid');
+  grid.innerHTML = '';
+
+  const ORDER = ['total_count','title_cpc','title_cpa','company_cpc','company_cpa','cpc_dist'];
+
+  ORDER.forEach(id => {
+    const card = cards[id];
+    if (!card) return;
+    const el = buildCardEl(card);
+    grid.appendChild(el);
+  });
+}
+
+function buildCardEl(card) {
+  const div = document.createElement('div');
+  div.className = 'card';
+
+  if (card.type === 'stat') {
+    div.innerHTML = `
+      <div class="card-header">
+        <span class="card-label">${escHtml(card.label)}</span>
+      </div>
+      <div class="card-body">
+        <div class="stat-value">${(card.value || 0).toLocaleString()}</div>
+        <div class="stat-label">total nodes</div>
+      </div>
+    `;
+    return div;
+  }
+
+  const rows = card.rows || [];
+  const metaStr = card.capped
+    ? `${rows.length} of ${(card.total_unique||0).toLocaleString()} rows (capped)`
+    : `${rows.length} row(s)`;
+
+  let tableHtml = '';
+  if (card.id === 'cpc_dist') {
+    tableHtml = `
+      <table>
+        <thead><tr><th>CPC Value</th><th style="text-align:right">Count</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td class="num">${r.cpc_value != null ? r.cpc_value.toFixed(4) : '—'}</td>
+              <td class="num">${(r.count||0).toLocaleString()}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } else {
+    const isTitle = card.id.startsWith('title');
+    const isCompany = card.id.startsWith('company');
+    const metricKey = card.id.endsWith('_cpc') ? 'avg_cpc' : 'avg_cpa';
+    const metricLabel = metricKey === 'avg_cpc' ? 'Avg CPC' : 'Avg CPA';
+    const valueLabel = isTitle ? 'Title' : isCompany ? 'Company' : 'Value';
+
+    tableHtml = `
+      <table>
+        <thead>
+          <tr>
+            <th>${valueLabel}</th>
+            <th style="text-align:right">Count</th>
+            <th style="text-align:right">${metricLabel}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => {
+            const metricVal = r[metricKey];
+            const metricDisplay = metricVal != null ? metricVal.toFixed(4) : '—';
+            const isMissing = r.value === '(missing)';
+            return `
+              <tr>
+                <td class="${isMissing ? 'dim' : ''}">${escHtml(r.value || '')}</td>
+                <td class="num">${(r.count||0).toLocaleString()}</td>
+                <td class="num ${metricVal == null ? 'dim' : ''}">${metricDisplay}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  div.innerHTML = `
+    <div class="card-header">
+      <span class="card-label">${escHtml(card.label)}</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="card-meta">${metaStr}</span>
+        <button class="btn btn-sm btn-ghost" onclick="exportCard('${card.id}', this)">Export CSV</button>
+      </div>
+    </div>
+    <div class="card-body" style="padding:0;overflow-x:auto;">
+      ${tableHtml}
+    </div>
+  `;
+
+  // Store rows on the button for export
+  const btn = div.querySelector('button');
+  btn._rows = rows;
+
+  return div;
+}
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+async function exportCard(cardId, btn) {
+  const rows = btn._rows || [];
+  const resp = await fetch('/api/export_csv', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({card_id: cardId, rows}),
+  });
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = cardId + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------------------
+// Utils
+// ---------------------------------------------------------------------------
+function escHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
