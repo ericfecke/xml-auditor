@@ -1,4 +1,6 @@
+import io
 import re
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from copy import deepcopy
 
@@ -6,41 +8,40 @@ from copy import deepcopy
 def run(state, parent_tag, field_map):
     state = deepcopy(state)
     try:
-        root = state.get("root")
-        if root is None:
+        content_bytes = state.get("content_bytes", b"")
+        if not content_bytes:
             state["errors"].append({
                 "agent": "breakdown",
-                "message": "No parsed XML root in state",
+                "message": "No content bytes in state",
                 "severity": "error",
             })
             return state
 
         state["parent_tag"] = parent_tag
 
-        title_tag = field_map.get("title") or ""
+        title_tag   = field_map.get("title")   or ""
         company_tag = field_map.get("company") or ""
-        cpc_tag = field_map.get("cpc") or ""
-        cpa_tag = field_map.get("cpa") or ""
+        cpc_tag     = field_map.get("cpc")     or ""
+        cpa_tag     = field_map.get("cpa")     or ""
 
-        # Accumulators: {value: {"count": N, "sum": X, "has_metric": bool}}
-        title_cpc_acc = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
-        title_cpa_acc = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
+        title_cpc_acc   = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
+        title_cpa_acc   = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         company_cpc_acc = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         company_cpa_acc = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
-        cpc_dist_acc = defaultdict(int)  # {cpc_value_str: count}
+        cpc_dist_acc    = defaultdict(int)
 
         node_count = 0
 
-        # Single pass over parent nodes
-        for node in root.iter(parent_tag):
+        # Single pass via iterparse — never builds the full tree in memory
+        for node in _iter_nodes(content_bytes, parent_tag):
             node_count += 1
 
-            title = _get_text(node, title_tag)
+            title   = _get_text(node, title_tag)
             company = _get_text(node, company_tag)
-            cpc = _parse_numeric(node, cpc_tag)
-            cpa = _parse_numeric(node, cpa_tag)
+            cpc     = _parse_numeric(node, cpc_tag)
+            cpa     = _parse_numeric(node, cpa_tag)
 
-            title_key = title or "(missing)"
+            title_key   = title   or "(missing)"
             company_key = company or "(missing)"
 
             # title × CPC
@@ -74,34 +75,19 @@ def run(state, parent_tag, field_map):
         state["node_count"] = node_count
 
         cards = {}
-
-        cards["title_cpc"] = _build_card(
-            "title_cpc", "Job Title × CPC",
-            title_cpc_acc, "avg_cpc", cap=25
-        )
-        cards["title_cpa"] = _build_card(
-            "title_cpa", "Job Title × CPA",
-            title_cpa_acc, "avg_cpa", cap=25
-        )
-        cards["company_cpc"] = _build_card(
-            "company_cpc", "Company × CPC",
-            company_cpc_acc, "avg_cpc", cap=25
-        )
-        cards["company_cpa"] = _build_card(
-            "company_cpa", "Company × CPA",
-            company_cpa_acc, "avg_cpa", cap=25
-        )
-        cards["cpc_dist"] = _build_cpc_dist(cpc_dist_acc)
+        cards["title_cpc"]   = _build_card("title_cpc",   "Job Title × CPC",  title_cpc_acc,   "avg_cpc", cap=25)
+        cards["title_cpa"]   = _build_card("title_cpa",   "Job Title × CPA",  title_cpa_acc,   "avg_cpa", cap=25)
+        cards["company_cpc"] = _build_card("company_cpc", "Company × CPC",    company_cpc_acc, "avg_cpc", cap=25)
+        cards["company_cpa"] = _build_card("company_cpa", "Company × CPA",    company_cpa_acc, "avg_cpa", cap=25)
+        cards["cpc_dist"]    = _build_cpc_dist(cpc_dist_acc)
         cards["total_count"] = {
-            "id": "total_count",
+            "id":    "total_count",
             "label": "Total Node Count",
-            "type": "stat",
+            "type":  "stat",
             "value": node_count,
         }
 
         state["cards"] = cards
-
-        # Collect available tags from field_candidates for UI
         state["available_tags"] = list(state.get("field_candidates", {}).keys())
 
     except Exception as exc:
@@ -114,29 +100,57 @@ def run(state, parent_tag, field_map):
     return state
 
 
+# ---------------------------------------------------------------------------
+# Iterparse node generator
+# ---------------------------------------------------------------------------
+
+def _iter_nodes(content_bytes, parent_tag):
+    """Yield each fully-parsed parent_tag element, then clear it from memory."""
+    depth = 0
+    try:
+        for event, elem in ET.iterparse(io.BytesIO(content_bytes), events=("start", "end")):
+            tag = _strip_ns(elem.tag)
+            if event == "start" and tag == parent_tag:
+                depth += 1
+            elif event == "end" and tag == parent_tag:
+                depth -= 1
+                if depth == 0:
+                    yield elem       # caller reads children here
+                    elem.clear()     # then we free them
+    except ET.ParseError:
+        pass   # truncated XML — stop cleanly
+
+
+# ---------------------------------------------------------------------------
+# Field helpers
+# ---------------------------------------------------------------------------
+
+def _strip_ns(tag):
+    return re.sub(r"^\{[^}]+\}", "", tag)
+
+
 def _get_text(node, tag):
     if not tag:
         return None
+    # Direct child (no namespace)
     elem = node.find(tag)
-    if elem is None:
-        # Try stripping namespace in case reader stripped ns but tag stored with ns
-        for child in node.iter():
-            local = re.sub(r"^\{[^}]+\}", "", child.tag)
-            if local == tag:
-                text = (child.text or "").strip()
-                return text if text else None
-        return None
-    text = (elem.text or "").strip()
-    return text if text else None
+    if elem is not None:
+        text = (elem.text or "").strip()
+        return text if text else None
+    # Deep search with namespace stripping
+    for child in node.iter():
+        if _strip_ns(child.tag) == tag:
+            text = (child.text or "").strip()
+            return text if text else None
+    return None
 
 
 def _parse_numeric(node, tag):
     text = _get_text(node, tag)
     if text is None:
         return None
-    # Strip currency symbol and commas
     cleaned = text.replace("$", "").replace(",", "").strip()
-    if cleaned == "":
+    if not cleaned:
         return None
     try:
         return float(cleaned)
@@ -144,42 +158,39 @@ def _parse_numeric(node, tag):
         return None
 
 
+# ---------------------------------------------------------------------------
+# Card builders
+# ---------------------------------------------------------------------------
+
 def _build_card(card_id, label, acc, metric_key, cap):
     rows_raw = []
     for value, data in acc.items():
         count = data["count"]
-        if data["has_metric"] and count > 0:
-            avg = round(data["sum"] / count, 4)
-        else:
-            avg = None
+        avg = round(data["sum"] / count, 4) if data["has_metric"] and count > 0 else None
         rows_raw.append({"value": value, "count": count, metric_key: avg})
 
     rows_raw.sort(key=lambda r: r["count"], reverse=True)
     total_unique = len(rows_raw)
-
-    if cap is not None and total_unique > cap:
-        rows = rows_raw[:cap]
-        capped = True
-    else:
-        rows = rows_raw
-        capped = False
+    capped = cap is not None and total_unique > cap
 
     return {
-        "id": card_id,
-        "label": label,
+        "id":          card_id,
+        "label":       label,
         "total_unique": total_unique,
-        "capped": capped,
-        "rows": rows,
+        "capped":      capped,
+        "rows":        rows_raw[:cap] if capped else rows_raw,
     }
 
 
 def _build_cpc_dist(acc):
-    rows = [{"cpc_value": v, "count": c} for v, c in acc.items()]
-    rows.sort(key=lambda r: r["cpc_value"])
+    rows = sorted(
+        [{"cpc_value": v, "count": c} for v, c in acc.items()],
+        key=lambda r: r["cpc_value"],
+    )
     return {
-        "id": "cpc_dist",
-        "label": "CPC Value Distribution",
+        "id":          "cpc_dist",
+        "label":       "CPC Value Distribution",
         "total_unique": len(rows),
-        "capped": False,
-        "rows": rows,
+        "capped":      False,
+        "rows":        rows,
     }
