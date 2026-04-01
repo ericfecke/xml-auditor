@@ -1,12 +1,10 @@
+import gzip
 import hashlib
-import io
 import re
 import urllib.request
-import zlib
 from copy import deepcopy
 
-MAX_DECOMPRESSED = 50 * 1024 * 1024  # 50 MB decompressed cap
-CHUNK = 65536                          # 64 KB read chunks
+PASTE_MAX = 10 * 1024 * 1024   # 10 MB cap on raw paste (URL feeds stream — no cap)
 
 
 def run(state, url=None, xml_text=None):
@@ -15,38 +13,40 @@ def run(state, url=None, xml_text=None):
         if url:
             state["source_url"] = url
             state["source_label"] = _hostname(url)
-            content_bytes, is_gzip, truncated = _fetch_url(url)
+            # Peek at first 2 bytes only — detect gzip without loading feed
+            is_gzip, cache_key = _peek_url(url)
+            state["is_gzip"] = is_gzip
+            state["cache_key"] = cache_key
+            state["content_bytes"] = b""   # URL feeds stream — nothing stored here
+            state["encoding"] = "utf-8"    # sniffed properly by reader during stream
+
         elif xml_text:
             state["source_url"] = None
             state["source_label"] = "paste"
             raw = xml_text.encode("utf-8") if isinstance(xml_text, str) else xml_text
+            if len(raw) > PASTE_MAX:
+                raw = raw[:PASTE_MAX]
+                state["errors"].append({
+                    "agent": "intake",
+                    "message": "Paste exceeds 10 MB — truncated. Use a URL for large feeds.",
+                    "severity": "warn",
+                })
             is_gzip = raw[:2] == b"\x1f\x8b"
             if is_gzip:
-                content_bytes = zlib.decompress(raw, zlib.MAX_WBITS | 16)[:MAX_DECOMPRESSED]
-                truncated = len(raw) > MAX_DECOMPRESSED
+                content = gzip.decompress(raw)
             else:
-                content_bytes = raw[:MAX_DECOMPRESSED]
-                truncated = len(raw) > MAX_DECOMPRESSED
+                content = raw
+            state["is_gzip"] = is_gzip
+            state["content_bytes"] = content
+            state["cache_key"] = hashlib.sha256(content).hexdigest()
+            state["encoding"] = _sniff_encoding(content)
+            state["raw_bytes"] = raw[:512]
+
         else:
             state["errors"].append({
                 "agent": "intake",
                 "message": "No URL or XML text provided",
                 "severity": "error",
-            })
-            return state
-
-        state["content_bytes"] = content_bytes
-        state["raw_bytes"] = content_bytes[:4096]   # small sample — never serialized
-        state["cache_key"] = hashlib.sha256(content_bytes).hexdigest()
-        state["is_gzip"] = is_gzip
-        state["truncated"] = truncated
-        state["encoding"] = _sniff_encoding(content_bytes)
-
-        if truncated:
-            state["errors"].append({
-                "agent": "intake",
-                "message": "Feed exceeds 50 MB — analysis based on first 50 MB of content",
-                "severity": "warn",
             })
 
     except Exception as exc:
@@ -60,81 +60,18 @@ def run(state, url=None, xml_text=None):
 
 
 # ---------------------------------------------------------------------------
-# Fetch helpers
+# Helpers
 # ---------------------------------------------------------------------------
 
-def _fetch_url(url):
+def _peek_url(url):
+    """Fetch first 2 bytes to detect gzip. Returns (is_gzip, cache_key)."""
     req = urllib.request.Request(url, headers={"User-Agent": "XMLAuditor/1.0"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         first2 = resp.read(2)
-        is_gzip = first2 == b"\x1f\x8b"
-        if is_gzip:
-            content_bytes, truncated = _stream_decompress(resp, first2)
-        else:
-            content_bytes, truncated = _stream_plain(resp, first2)
-    return content_bytes, is_gzip, truncated
+    is_gzip = first2 == b"\x1f\x8b"
+    cache_key = hashlib.sha256(url.encode()).hexdigest()
+    return is_gzip, cache_key
 
-
-def _stream_plain(resp, already_read):
-    """Read plain XML up to MAX_DECOMPRESSED bytes."""
-    chunks = [already_read]
-    total = len(already_read)
-    truncated = False
-    while True:
-        chunk = resp.read(CHUNK)
-        if not chunk:
-            break
-        chunks.append(chunk)
-        total += len(chunk)
-        if total >= MAX_DECOMPRESSED:
-            truncated = True
-            break
-    data = b"".join(chunks)
-    return data[:MAX_DECOMPRESSED], truncated
-
-
-def _stream_decompress(resp, already_read):
-    """Stream-decompress gzip response, stopping at MAX_DECOMPRESSED bytes."""
-    decomp = zlib.decompressobj(zlib.MAX_WBITS | 16)  # 16 = gzip auto-header
-    out_chunks = []
-    total_out = 0
-    truncated = False
-
-    for raw_input in (already_read, None):  # prime with already_read, then loop
-        if raw_input is not None:
-            chunk = raw_input
-        else:
-            while total_out < MAX_DECOMPRESSED:
-                chunk = resp.read(CHUNK)
-                if not chunk:
-                    break
-                try:
-                    piece = decomp.decompress(chunk)
-                except zlib.error:
-                    break
-                remaining = MAX_DECOMPRESSED - total_out
-                if len(piece) >= remaining:
-                    out_chunks.append(piece[:remaining])
-                    total_out = MAX_DECOMPRESSED
-                    truncated = True
-                    break
-                out_chunks.append(piece)
-                total_out += len(piece)
-            break
-
-        try:
-            piece = decomp.decompress(chunk)
-        except zlib.error:
-            break
-        out_chunks.append(piece)
-        total_out += len(piece)
-
-    return b"".join(out_chunks), truncated
-
-
-# ---------------------------------------------------------------------------
-# Utilities
-# ---------------------------------------------------------------------------
 
 def _sniff_encoding(content_bytes):
     try:

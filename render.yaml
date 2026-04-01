@@ -3,7 +3,7 @@ services:
     name: xml-auditor
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --workers 2 --timeout 120
+    startCommand: gunicorn app:app --workers 2 --timeout 300
     plan: free
     envVars:
       - key: PYTHON_VERSION
