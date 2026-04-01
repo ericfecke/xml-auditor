@@ -351,7 +351,8 @@
 let inputMode = 'url';
 let selectedParent = null;
 let probeData = null;
-let lastInputPayload = null; // {url?, xml_text?}
+let lastInputPayload = null;   // {url?, xml_text?}
+let lastAnalysisParams = null; // {url?, xml_text?, parent_tag, field_map} — for export
 
 const TITLE_ALIASES = ['title','job_title','jobtitle','position','job_name'];
 const COMPANY_ALIASES = ['company','advertiser','employer','employer_name','client'];
@@ -498,6 +499,8 @@ async function runAnalysis() {
 
   try {
     const body = Object.assign({}, lastInputPayload, {parent_tag: selectedParent, field_map});
+    lastAnalysisParams = body;   // store for export
+
     const resp = await fetch('/api/analyze', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -595,9 +598,10 @@ function buildCardEl(card) {
   }
 
   const rows = card.rows || [];
+  const total = card.total_unique || rows.length;
   const metaStr = card.capped
-    ? `${rows.length} of ${(card.total_unique||0).toLocaleString()} rows (capped)`
-    : `${rows.length} row(s)`;
+    ? `top ${rows.length} of ${total.toLocaleString()}`
+    : `${rows.length.toLocaleString()} row(s)`;
 
   let tableHtml = '';
   if (card.id === 'cpc_dist') {
@@ -653,7 +657,7 @@ function buildCardEl(card) {
       <span class="card-label">${escHtml(card.label)}</span>
       <div style="display:flex;gap:8px;align-items:center;">
         <span class="card-meta">${metaStr}</span>
-        <button class="btn btn-sm btn-ghost" onclick="exportCard('${card.id}', this)">Export CSV</button>
+        <button class="btn btn-sm btn-ghost" onclick="exportCard('${card.id}')">Export CSV (all ${(card.total_unique||rows.length).toLocaleString()})</button>
       </div>
     </div>
     <div class="card-body" style="padding:0;overflow-x:auto;">
@@ -661,22 +665,19 @@ function buildCardEl(card) {
     </div>
   `;
 
-  // Store rows on the button for export
-  const btn = div.querySelector('button');
-  btn._rows = rows;
-
   return div;
 }
 
 // ---------------------------------------------------------------------------
 // Export
 // ---------------------------------------------------------------------------
-async function exportCard(cardId, btn) {
-  const rows = btn._rows || [];
+async function exportCard(cardId) {
+  if (!lastAnalysisParams) return;
+  const body = Object.assign({}, lastAnalysisParams, {card_id: cardId});
   const resp = await fetch('/api/export_csv', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({card_id: cardId, rows}),
+    body: JSON.stringify(body),
   });
   const blob = await resp.blob();
   const url = URL.createObjectURL(blob);

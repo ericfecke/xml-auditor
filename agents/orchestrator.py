@@ -1,10 +1,12 @@
 import hashlib
+import json
 import time
 from copy import deepcopy
 
 from agents import intake_agent, reader_agent, breakdown_agent, qa_agent
 
-FEED_CACHE = {}
+FEED_CACHE      = {}   # {key: {state, cached_at}}  — post-reader state
+BREAKDOWN_CACHE = {}   # {key: {state, cached_at}}  — post-breakdown state
 CACHE_TTL = 900  # 15 minutes
 
 
@@ -21,6 +23,25 @@ def get_cached(key):
 
 def set_cache(key, state):
     FEED_CACHE[key] = {"state": state, "cached_at": time.time()}
+
+
+def _breakdown_cache_key(reader_key, parent_tag, field_map):
+    sig = json.dumps({"k": reader_key, "p": parent_tag, "f": field_map}, sort_keys=True)
+    return hashlib.sha256(sig.encode()).hexdigest()
+
+
+def get_breakdown_cached(url, xml_text, parent_tag, field_map):
+    reader_key = _cache_key_for(url, xml_text)
+    bd_key = _breakdown_cache_key(reader_key, parent_tag, field_map or {})
+    entry = BREAKDOWN_CACHE.get(bd_key)
+    if entry and time.time() - entry["cached_at"] < CACHE_TTL:
+        return entry["state"]
+    return None
+
+
+def _set_breakdown_cache(reader_key, parent_tag, field_map, state):
+    bd_key = _breakdown_cache_key(reader_key, parent_tag, field_map or {})
+    BREAKDOWN_CACHE[bd_key] = {"state": state, "cached_at": time.time()}
 
 
 def _cache_key_for(url, xml_text):
@@ -123,4 +144,9 @@ def run_pipeline(url=None, xml_text=None, parent_tag=None, field_map=None):
     # Breakdown and QA always re-run (field_map can differ between calls)
     state = breakdown_agent.run(state, parent_tag=parent_tag, field_map=field_map)
     state = qa_agent.run(state)
+
+    # Cache breakdown result so export is instant (no re-fetch)
+    reader_key = state.get("cache_key") or pre_key
+    _set_breakdown_cache(reader_key, parent_tag, field_map, deepcopy(state))
+
     return state

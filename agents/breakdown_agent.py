@@ -192,7 +192,8 @@ def _build_card(card_id, label, acc, metric_key, cap):
     return {
         "id": card_id, "label": label,
         "total_unique": total_unique, "capped": capped,
-        "rows": rows_raw[:cap] if capped else rows_raw,
+        "rows":     rows_raw[:cap] if capped else rows_raw,  # display (capped)
+        "all_rows": rows_raw,                                 # export (full)
     }
 
 
@@ -203,5 +204,6 @@ def _build_cpc_dist(acc):
     )
     return {
         "id": "cpc_dist", "label": "CPC Value Distribution",
-        "total_unique": len(rows), "capped": False, "rows": rows,
+        "total_unique": len(rows), "capped": False,
+        "rows": rows, "all_rows": rows,
     }

@@ -50,9 +50,14 @@ def analyze():
         field_map=field_map,
     )
 
+    # Strip all_rows before sending to frontend — kept server-side for export
+    cards = {}
+    for card_id, card in state.get("cards", {}).items():
+        cards[card_id] = {k: v for k, v in card.items() if k != "all_rows"}
+
     return jsonify({
         "node_count": state.get("node_count", 0),
-        "cards": state.get("cards", {}),
+        "cards": cards,
         "qa_flags": state.get("qa_flags", []),
         "confidence": state.get("confidence", 1.0),
         "qa_passed": state.get("qa_passed", True),
@@ -62,20 +67,33 @@ def analyze():
 
 @app.route("/api/export_csv", methods=["POST"])
 def export_csv():
-    data = request.get_json(force=True) or {}
-    card_id = data.get("card_id", "export")
-    rows = data.get("rows", [])
+    data       = request.get_json(force=True) or {}
+    card_id    = data.get("card_id", "export")
+    url        = data.get("url") or None
+    xml_text   = data.get("xml_text") or None
+    parent_tag = data.get("parent_tag", "")
+    field_map  = data.get("field_map") or {}
+
+    # Look up cached breakdown state — no re-fetch needed
+    state = orchestrator.get_breakdown_cached(url, xml_text, parent_tag, field_map)
+    if state is None:
+        # Fallback: re-run (handles edge cases like cache expiry)
+        state = orchestrator.run_pipeline(
+            url=url, xml_text=xml_text,
+            parent_tag=parent_tag, field_map=field_map,
+        )
+
+    card = state.get("cards", {}).get(card_id, {})
+    rows = card.get("all_rows") or card.get("rows", [])
 
     def generate():
-        buf = io.StringIO()
         if not rows:
             yield ""
             return
-
+        buf = io.StringIO()
         writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         yield buf.getvalue()
-
         for row in rows:
             buf = io.StringIO()
             writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
@@ -83,10 +101,10 @@ def export_csv():
             yield buf.getvalue()
 
     filename = f"{card_id}.csv"
-    headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-    }
-    return Response(generate(), mimetype="text/csv", headers=headers)
+    return Response(
+        generate(), mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ---------------------------------------------------------------------------
