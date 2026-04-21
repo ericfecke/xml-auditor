@@ -165,7 +165,9 @@ def _parse_numeric(node, tag):
     text = _get_text(node, tag)
     if text is None:
         return None
-    cleaned = text.replace("$", "").replace(",", "").strip()
+    # Strip all non-numeric characters except digits and decimal point.
+    # Handles: $0.35  £0.18  €0.42  ¥120  1,200.00  and any other currency symbol.
+    cleaned = re.sub(r"[^\d.]", "", text.strip())
     if not cleaned:
         return None
     try:

@@ -79,8 +79,9 @@ The Reader and Breakdown agents should surface these as candidates. Don't hardco
 ## CPC/CPA Data Patterns
 
 - Values are almost always decimals: `0.35`, `1.20`, `5.00`
-- Sometimes formatted with currency: `$0.35` — strip the `$` before parsing
+- Sometimes prefixed with a currency symbol: `$0.35`, `£0.18`, `€0.42`, `¥120` — strip before parsing
 - Sometimes comma-formatted: `1,200.00` — strip commas
+- Safe parsing rule: extract only digits and the decimal point — handles all currency symbols and locales
 - Zeroes (`0`, `0.00`) are valid — don't treat as missing
 - Empty string or missing tag = truly missing — represent as `None` in output
 - CPA is often much larger than CPC (apply costs more than a click)
