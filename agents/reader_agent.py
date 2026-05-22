@@ -6,6 +6,8 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from copy import deepcopy
 
+from .http_utils import build_request
+
 KNOWN_PARENT_NAMES = {"job", "item", "listing", "result", "record", "vacancy"}
 
 
@@ -93,7 +95,7 @@ def _open_stream(state):
 
 def _stream_url(url, is_gzip):
     """Generator: stream-parse XML from a URL, decompressing gzip on the fly."""
-    req = urllib.request.Request(url, headers={"User-Agent": "XMLAuditor/1.0"})
+    req = build_request(url)
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
             src = gzip.GzipFile(fileobj=resp) if is_gzip else resp

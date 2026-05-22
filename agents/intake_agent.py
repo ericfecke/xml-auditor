@@ -4,6 +4,8 @@ import re
 import urllib.request
 from copy import deepcopy
 
+from .http_utils import build_request, hostname_from_url
+
 PASTE_MAX = 10 * 1024 * 1024   # 10 MB cap on raw paste (URL feeds stream — no cap)
 
 
@@ -12,7 +14,7 @@ def run(state, url=None, xml_text=None):
     try:
         if url:
             state["source_url"] = url
-            state["source_label"] = _hostname(url)
+            state["source_label"] = hostname_from_url(url)
             # Peek at first 2 bytes only — detect gzip without loading feed
             is_gzip, cache_key = _peek_url(url)
             state["is_gzip"] = is_gzip
@@ -65,7 +67,7 @@ def run(state, url=None, xml_text=None):
 
 def _peek_url(url):
     """Fetch first 2 bytes to detect gzip. Returns (is_gzip, cache_key)."""
-    req = urllib.request.Request(url, headers={"User-Agent": "XMLAuditor/1.0"})
+    req = build_request(url)
     with urllib.request.urlopen(req, timeout=30) as resp:
         first2 = resp.read(2)
     is_gzip = first2 == b"\x1f\x8b"
@@ -84,9 +86,3 @@ def _sniff_encoding(content_bytes):
     return "utf-8"
 
 
-def _hostname(url):
-    try:
-        m = re.search(r"https?://([^/]+)", url)
-        return m.group(1) if m else url
-    except Exception:
-        return url

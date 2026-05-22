@@ -6,6 +6,8 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from copy import deepcopy
 
+from .http_utils import build_request
+
 
 def run(state, parent_tag, field_map):
     state = deepcopy(state)
@@ -113,7 +115,7 @@ def _iter_nodes(state, parent_tag):
 
 
 def _iter_nodes_url(url, is_gzip, parent_tag):
-    req = urllib.request.Request(url, headers={"User-Agent": "XMLAuditor/1.0"})
+    req = build_request(url)
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
             src = gzip.GzipFile(fileobj=resp) if is_gzip else resp
@@ -151,12 +153,14 @@ def _get_text(node, tag):
         return None
     elem = node.find(tag)
     if elem is not None:
-        text = (elem.text or "").strip()
+        # itertext() collects text from the element AND all descendants,
+        # so <company><name>Acme</name></company> works as well as <company>Acme</company>
+        text = " ".join(elem.itertext()).strip()
         return text if text else None
     # Deep search with namespace stripping
     for child in node.iter():
         if _strip_ns(child.tag) == tag:
-            text = (child.text or "").strip()
+            text = " ".join(child.itertext()).strip()
             return text if text else None
     return None
 
