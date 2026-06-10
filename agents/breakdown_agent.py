@@ -1,12 +1,10 @@
-import gzip
 import io
 import re
-import urllib.request
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from copy import deepcopy
 
-from .http_utils import build_request
+from .http_utils import open_stream
 
 
 def run(state, parent_tag, field_map):
@@ -130,10 +128,8 @@ def _iter_nodes(state, parent_tag):
 
 
 def _iter_nodes_url(url, is_gzip, parent_tag):
-    req = build_request(url)
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            src = gzip.GzipFile(fileobj=resp) if is_gzip else resp
+        with open_stream(url, is_gzip) as src:
             yield from _iter_nodes_bytes(src, parent_tag)
     except Exception:
         pass
