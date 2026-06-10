@@ -2,7 +2,7 @@
 
 A multi-agent Flask tool for auditing job feed XMLs. Paste a URL or raw XML, pick your field mappings, get aggregated cards showing counts and average CPC/CPA per title, company, CPC value, and job URL. Exports full data to CSV.
 
-Built for ad ops analysts doing quick feed sanity checks. Handles feeds of any size — including gzip-compressed feeds and multi-hundred-MB XML files — via streaming.
+Built for ad ops analysts doing quick feed sanity checks. Handles feeds of any size — including gzip-compressed feeds and multi-hundred-MB XML files — via streaming. Supports HTTP, HTTPS, and FTP feeds.
 
 ---
 
@@ -40,9 +40,9 @@ Intake → Reader → Breakdown → QA → Flask → Frontend
 
 | Agent | Role |
 |---|---|
-| **Intake** | URL mode: peeks 2 bytes (gzip detect), stores URL only. Paste mode: stores content (10 MB cap). Handles URLs with embedded credentials (user:pass@host), including percent-encoded passwords. |
-| **Reader** | Streams full feed via `iterparse` — builds tag inventory, parent candidates, field samples. Never loads full XML into memory. |
-| **Breakdown** | Re-streams feed from URL, single iterparse pass, computes all 7 cards simultaneously. Clears each node after processing. Supports nested fields (e.g. `<company><name>`) via `itertext()`. |
+| **Intake** | URL mode: detects gzip and stores URL only (HTTP peeks 2 bytes; FTP uses file extension). Paste mode: stores content (10 MB cap). |
+| **Reader** | Streams full feed via `iterparse` — builds tag inventory, parent candidates, field samples. Never loads full XML into memory. Works over HTTP, HTTPS, and FTP. |
+| **Breakdown** | Re-streams feed, single iterparse pass, computes all 7 cards simultaneously. Clears each node after processing. Supports nested fields (e.g. `<company><name>`) via `itertext()`. |
 | **QA** | Scores confidence 0–1. Flags missing fields, outlier CPC/CPA values, empty feeds. |
 | **Orchestrator** | In-memory cache (15 min TTL): post-reader metadata cached by URL/content hash. Breakdown re-runs when field mapping changes. |
 
@@ -54,7 +54,8 @@ Feeds of any size are supported. The tool streams directly into the XML parser �
 
 - **Large uncompressed XML** (1+ GB) — tested with 300,000+ node feeds; processing time on Render free tier is roughly 60–90 seconds
 - **Gzip-compressed feeds** (100+ MB compressed) — streamed and decompressed on the fly; magic-byte detection, not relying on file extension or HTTP headers
-- **Authenticated URLs** — `user:pass@host` format supported, including percent-encoded passwords (`%2B`, `%3D`, etc.)
+- **FTP feeds** — `ftp://user:pass@host/feed.xml` supported via `ftplib`; passive mode on by default; gzip detected from file extension
+- **Authenticated URLs** — `user:pass@host` format supported for both HTTP and FTP, including percent-encoded passwords (`%2B`, `%3D`, etc.)
 - **Paste mode** — capped at 10 MB (use URL mode for large feeds)
 
 ---
@@ -138,7 +139,7 @@ xml-auditor/
 ├── render.yaml             ← Render deployment config
 ├── requirements.txt        ← flask, gunicorn
 ├── agents/
-│   ├── http_utils.py       ← Shared URL request builder (credential + encoding handling)
+│   ├── http_utils.py       ← Shared URL/FTP stream opener (credentials, encoding, FTP via ftplib)
 │   ├── intake_agent.py     ← URL peek / paste ingest
 │   ├── reader_agent.py     ← Streaming iterparse, tag inventory
 │   ├── breakdown_agent.py  ← Streaming single-pass aggregation, 7 cards

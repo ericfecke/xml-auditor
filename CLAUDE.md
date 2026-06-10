@@ -56,7 +56,9 @@ state = {
 
 ### Intake
 
-**URL mode:** Open connection, read first 2 bytes only to detect gzip (`b"\x1f\x8b"`). Store `source_url` and `is_gzip`. Do NOT read full content — `content_bytes` stays `b""`. Cache key = `sha256(url.encode())`.
+**HTTP/HTTPS mode:** Open connection, read first 2 bytes to detect gzip (`b"\x1f\x8b"`). Store `source_url` and `is_gzip`. Do NOT read full content — `content_bytes` stays `b""`. Cache key = `sha256(url.encode())`.
+
+**FTP mode:** Gzip detected from file extension (`.gz`) — FTP has no HEAD or range requests. Credentials decoded from `ftp://user:pass@host/path` format. `is_gzip` set accordingly. Cache key = `sha256(url.encode())`.
 
 **Paste mode:** Accept raw XML string or bytes. Cap at 10 MB. Decompress if gzip. Store full content in `content_bytes`. Cache key = `sha256(content_bytes)`.
 
@@ -66,7 +68,7 @@ Sniff encoding from XML declaration header. On any error: append to errors, retu
 
 Stream the full feed via `ET.iterparse` — never builds the full tree in memory.
 
-**URL mode:** Open a new HTTP connection, stream through `gzip.GzipFile(fileobj=resp)` if gzip, feed directly into `ET.iterparse`. `content_bytes` is empty; reader re-fetches the URL.
+**URL mode (HTTP/HTTPS/FTP):** Opens a stream via `http_utils.open_stream(url, is_gzip)` — handles HTTP and FTP transparently. For FTP, uses `ftplib.FTP.transfercmd('RETR <path>')` to stream directly without directory navigation. `content_bytes` is empty; reader re-fetches the URL.
 
 **Paste mode:** `ET.iterparse(io.BytesIO(content_bytes), ...)`.
 
@@ -83,7 +85,7 @@ Call `elem.clear()` after each "end" event to free memory. Handle `ET.ParseError
 
 Re-streams the full feed in a single `iterparse` pass. Never calls `root.iter()` — uses `_iter_nodes()` generator instead.
 
-**URL mode:** Opens a fresh HTTP connection to `state["source_url"]`, streams through gzip if needed.
+**URL mode (HTTP/HTTPS/FTP):** Opens a fresh stream via `http_utils.open_stream(url, is_gzip)`. Works for HTTP, HTTPS, and FTP.
 **Paste mode:** Parses from `io.BytesIO(state["content_bytes"])`.
 
 `_iter_nodes(state, parent_tag)` yields each fully-parsed parent element at its "end" event, then calls `elem.clear()`. This keeps RAM flat regardless of feed size.
@@ -216,7 +218,8 @@ UI: dark theme, monospace for data values, dense tool aesthetic.
 - No auth, no DB, no Docker, no Redis
 - URL feeds: no content stored — re-streamed on each analyze call
 - Paste feeds: content stored in RAM up to 10 MB
-- URLs with embedded credentials (`user:pass@host`) handled via `agents/http_utils.py` — credentials extracted and sent as `Authorization: Basic` header
+- URLs with embedded credentials (`user:pass@host`) handled via `agents/http_utils.py` — credentials extracted and sent as `Authorization: Basic` header (HTTP) or passed to `ftplib.FTP.login()` (FTP)
+- FTP feeds (`ftp://`) use `ftplib` directly — avoids urllib's FTP handler which fails with `550 No such directory` on direct-file paths. Passive mode on by default.
 - CPC/CPA parsing strips all currency symbols (`$`, `£`, `€`, `¥`, etc.) via `re.sub(r"[^\d.]", "", text)`
 - Nested field values (e.g. `<company><name>`) resolved via `elem.itertext()`
 - See `MEMORY.md` for field aliases, feed schemas, CPC/CPA quirks
