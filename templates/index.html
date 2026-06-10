@@ -135,7 +135,7 @@
   /* Field map grid */
   .field-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 10px;
     margin-bottom: 14px;
   }
@@ -326,6 +326,10 @@
           <label>CPA field</label>
           <select id="map-cpa"><option value="">— none —</option></select>
         </div>
+        <div class="field-group">
+          <label>URL field</label>
+          <select id="map-url"><option value="">— none —</option></select>
+        </div>
       </div>
     </div>
 
@@ -353,11 +357,13 @@ let selectedParent = null;
 let probeData = null;
 let lastInputPayload = null;   // {url?, xml_text?}
 let lastAnalysisParams = null; // {url?, xml_text?, parent_tag, field_map} — for export
+let lastCards = {};            // full card data including all_rows — for CSV export
 
-const TITLE_ALIASES = ['title','job_title','jobtitle','position','job_name'];
+const TITLE_ALIASES   = ['title','job_title','jobtitle','position','job_name'];
 const COMPANY_ALIASES = ['company','advertiser','employer','employer_name','client'];
-const CPC_ALIASES = ['cpc','bid','cpc_value','cost_per_click','price'];
-const CPA_ALIASES = ['cpa','revenue','cpa_value','cost_per_apply','conversion_value'];
+const CPC_ALIASES     = ['cpc','bid','cpc_value','cost_per_click','price'];
+const CPA_ALIASES     = ['cpa','revenue','cpa_value','cost_per_apply','conversion_value'];
+const URL_ALIASES     = ['url','link','apply_url','job_url','href','apply_link','detail_url','job_link'];
 
 // ---------------------------------------------------------------------------
 // Mode toggle
@@ -444,10 +450,11 @@ function renderProbeResult(data) {
 
   // Field mapping dropdowns
   const fieldTags = Object.keys(data.field_candidates || {});
-  populateDropdown('map-title', fieldTags, TITLE_ALIASES);
+  populateDropdown('map-title',   fieldTags, TITLE_ALIASES);
   populateDropdown('map-company', fieldTags, COMPANY_ALIASES);
-  populateDropdown('map-cpc', fieldTags, CPC_ALIASES);
-  populateDropdown('map-cpa', fieldTags, CPA_ALIASES);
+  populateDropdown('map-cpc',     fieldTags, CPC_ALIASES);
+  populateDropdown('map-cpa',     fieldTags, CPA_ALIASES);
+  populateDropdown('map-url',     fieldTags, URL_ALIASES);
 
   // Info line
   const gzip = data.is_gzip ? ' (gzip)' : '';
@@ -485,10 +492,11 @@ async function runAnalysis() {
   if (!selectedParent) return;
 
   const field_map = {
-    title: document.getElementById('map-title').value || null,
+    title:   document.getElementById('map-title').value   || null,
     company: document.getElementById('map-company').value || null,
-    cpc: document.getElementById('map-cpc').value || null,
-    cpa: document.getElementById('map-cpa').value || null,
+    cpc:     document.getElementById('map-cpc').value     || null,
+    cpa:     document.getElementById('map-cpa').value     || null,
+    url:     document.getElementById('map-url').value     || null,
   };
 
   document.getElementById('analyze-status').textContent = 'Analyzing…';
@@ -512,8 +520,9 @@ async function runAnalysis() {
     document.getElementById('btn-analyze').disabled = false;
     document.getElementById('panel-results').classList.remove('hidden');
 
+    lastCards = data.cards || {};
     renderQA(data);
-    renderCards(data.cards || {});
+    renderCards(lastCards);
   } catch(e) {
     document.getElementById('analyze-status').textContent = 'Error: ' + e.message;
     document.getElementById('btn-analyze').disabled = false;
@@ -570,7 +579,7 @@ function renderCards(cards) {
   const grid = document.getElementById('cards-grid');
   grid.innerHTML = '';
 
-  const ORDER = ['total_count','title_cpc','title_cpa','company_cpc','company_cpa','cpc_dist'];
+  const ORDER = ['total_count','title_cpc','title_cpa','company_cpc','company_cpa','cpc_dist','url_list'];
 
   ORDER.forEach(id => {
     const card = cards[id];
@@ -615,6 +624,27 @@ function buildCardEl(card) {
               <td class="num">${(r.count||0).toLocaleString()}</td>
             </tr>
           `).join('')}
+        </tbody>
+      </table>
+    `;
+  } else if (card.id === 'url_list') {
+    tableHtml = `
+      <table>
+        <thead><tr><th>URL</th><th style="text-align:right">Count</th></tr></thead>
+        <tbody>
+          ${rows.map(r => {
+            const display = r.url && r.url.length > 70 ? r.url.slice(0, 67) + '…' : (r.url || '—');
+            const isLink  = r.url && r.url.startsWith('http');
+            const cell    = isLink
+              ? `<a href="${escHtml(r.url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;">${escHtml(display)}</a>`
+              : `<span class="dim">${escHtml(display)}</span>`;
+            return `
+              <tr>
+                <td style="max-width:380px;overflow:hidden;">${cell}</td>
+                <td class="num">${(r.count||0).toLocaleString()}</td>
+              </tr>
+            `;
+          }).join('')}
         </tbody>
       </table>
     `;
@@ -669,20 +699,33 @@ function buildCardEl(card) {
 }
 
 // ---------------------------------------------------------------------------
-// Export
+// Export — client-side CSV from all_rows (already in analyze response)
 // ---------------------------------------------------------------------------
-async function exportCard(cardId) {
-  if (!lastAnalysisParams) return;
-  const body = Object.assign({}, lastAnalysisParams, {card_id: cardId});
-  const resp = await fetch('/api/export_csv', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body),
+function exportCard(cardId) {
+  const card = lastCards[cardId];
+  if (!card) return;
+  const rows = card.all_rows || card.rows || [];
+  if (!rows.length) return;
+
+  const headers = Object.keys(rows[0]);
+  const lines   = [headers.join(',')];
+
+  rows.forEach(row => {
+    lines.push(headers.map(h => {
+      const v = row[h];
+      if (v == null) return '';
+      const s = String(v);
+      // Quote fields that contain commas, quotes, or newlines
+      return (s.includes(',') || s.includes('"') || s.includes('\n'))
+        ? `"${s.replace(/"/g, '""')}"`
+        : s;
+    }).join(','));
   });
-  const blob = await resp.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
   a.download = cardId + '.csv';
   document.body.appendChild(a);
   a.click();

@@ -69,6 +69,7 @@ The Reader and Breakdown agents should surface these as candidates. Don't hardco
 | Company | `company`, `advertiser`, `employer`, `employer_name`, `client` |
 | CPC | `cpc`, `bid`, `cpc_value`, `cost_per_click`, `price` |
 | CPA | `cpa`, `revenue`, `cpa_value`, `cost_per_apply`, `conversion_value` |
+| URL | `url`, `link`, `apply_url`, `job_url`, `href`, `apply_link`, `detail_url`, `job_link` |
 | Source | `source`, `partner`, `feed_source`, `network`, `origin` |
 | Location | `location`, `city`, `state`, `geo`, `region` |
 | Category | `category`, `sector`, `job_type`, `industry`, `vertical` |
