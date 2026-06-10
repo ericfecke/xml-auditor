@@ -1,10 +1,11 @@
 import gzip
 import hashlib
 import re
+import urllib.parse
 import urllib.request
 from copy import deepcopy
 
-from .http_utils import build_request, hostname_from_url
+from .http_utils import build_request, hostname_from_url, is_ftp
 
 PASTE_MAX = 10 * 1024 * 1024   # 10 MB cap on raw paste (URL feeds stream — no cap)
 
@@ -66,13 +67,20 @@ def run(state, url=None, xml_text=None):
 # ---------------------------------------------------------------------------
 
 def _peek_url(url):
-    """Fetch first 2 bytes to detect gzip. Returns (is_gzip, cache_key)."""
+    """Detect gzip and return cache key. Returns (is_gzip, cache_key)."""
+    cache_key = hashlib.sha256(url.encode()).hexdigest()
+
+    if is_ftp(url):
+        # FTP has no HEAD request — detect gzip from file extension.
+        # FTP files are always explicitly named so the extension is reliable.
+        gzip_detected = urllib.parse.urlparse(url).path.lower().endswith(".gz")
+        return gzip_detected, cache_key
+
+    # HTTP/HTTPS — peek at magic bytes
     req = build_request(url)
     with urllib.request.urlopen(req, timeout=30) as resp:
         first2 = resp.read(2)
-    is_gzip = first2 == b"\x1f\x8b"
-    cache_key = hashlib.sha256(url.encode()).hexdigest()
-    return is_gzip, cache_key
+    return first2 == b"\x1f\x8b", cache_key
 
 
 def _sniff_encoding(content_bytes):
