@@ -110,11 +110,11 @@ If `confidence < 0.5`: set `qa_passed = False`, add `suggested_action` to each f
 
 ### Orchestrator
 
-Two independent caches — both in-memory, 15-minute TTL, no Redis, no disk.
+Single in-memory cache, 15-minute TTL, no Redis, no disk.
 
 ```python
-FEED_CACHE      = {}   # post-reader state (tag metadata). Key = sha256(url) or sha256(content)
-BREAKDOWN_CACHE = {}   # post-breakdown state (includes all_rows). Key = sha256(reader_key + parent_tag + field_map)
+FEED_CACHE = {}   # post-reader state (tag metadata). Key = sha256(url) or sha256(content)
+CACHE_TTL  = 900  # 15 minutes
 ```
 
 **probe_feed(url, xml_text):**
@@ -125,10 +125,9 @@ BREAKDOWN_CACHE = {}   # post-breakdown state (includes all_rows). Key = sha256(
 **run_pipeline(url, xml_text, parent_tag, field_map):**
 1. Check `FEED_CACHE` for reader state — run intake + reader if miss
 2. Run breakdown + QA (always — field_map can differ between calls)
-3. Store full post-QA state in `BREAKDOWN_CACHE` (keyed by reader_key + parent_tag + field_map)
-4. Return state
+3. Return state
 
-Breakdown always re-streams the URL — it does not use cached content. The `BREAKDOWN_CACHE` exists so that `/api/export_csv` can serve `all_rows` instantly without re-fetching the feed.
+Breakdown always re-streams the URL — it does not use cached content. `all_rows` from each card is included in the analyze response and used client-side for CSV export (no server round-trip needed).
 
 ---
 
@@ -155,12 +154,12 @@ Each non-stat card result shape (server-side):
     "label": "Job Title × CPC",
     "total_unique": 312,          # total distinct values
     "capped": True,
-    "rows": [...],                # top 25 — sent to frontend for display
-    "all_rows": [...],            # all rows — kept server-side, served on CSV export
+    "rows": [...],                # top 25 — for display
+    "all_rows": [...],            # all rows — included in analyze response, used for client-side CSV export
 }
 ```
 
-`all_rows` is stripped from the `/api/analyze` JSON response before sending to the frontend. It lives only in `BREAKDOWN_CACHE` and is streamed directly to CSV on export.
+`all_rows` is included in the `/api/analyze` response. The frontend stores it in `lastCards` and generates CSV client-side on export — no server round-trip.
 
 ---
 
@@ -170,12 +169,12 @@ Each non-stat card result shape (server-side):
 |---|---|---|
 | `GET /` | — | `index.html` |
 | `POST /api/probe` | `{url?, xml_text?}` | `{root_tag, is_gzip, parent_candidates, field_candidates, errors}` |
-| `POST /api/analyze` | `{url?, xml_text?, parent_tag, field_map}` | `{node_count, cards (rows only, no all_rows), qa_flags, confidence, errors}` |
-| `POST /api/export_csv` | `{card_id, url?, xml_text?, parent_tag, field_map}` | streaming CSV of all_rows from BREAKDOWN_CACHE |
+| `POST /api/analyze` | `{url?, xml_text?, parent_tag, field_map}` | `{node_count, cards (includes all_rows), qa_flags, confidence, errors}` |
+| `POST /api/export_csv` | `{card_id, rows}` | streaming CSV — legacy endpoint, no longer used by default UI |
 
 `field_map` shape: `{"title": "job_title", "company": "advertiser", "cpc": "cpc", "cpa": "cpa", "url": "url"}`
 
-Export looks up `BREAKDOWN_CACHE` first (instant). Falls back to re-running the full pipeline if cache has expired.
+CSV export is handled client-side: the frontend stores `all_rows` from the analyze response in `lastCards` and generates the CSV in the browser on demand.
 
 ---
 
@@ -189,17 +188,19 @@ URL input or paste toggle → "Probe Feed" → shows:
 - Field mapping dropdowns: Title, Company, CPC, CPA (auto-matched by alias from `field_candidates`)
 
 **Step 2 — Analyze**
-"Run Analysis" → all 6 cards render at once from single JSON response.
+"Run Analysis" → up to 7 cards render at once from single JSON response.
 
 Each card renders as a compact table. Total Count card renders as a single large stat.
 
 Card table columns:
 - Title/Company cards: Value | Count | Avg CPC or Avg CPA (show `—` for null)
 - CPC dist card: CPC Value | Count
+- URL card: URL (clickable link, truncated at 70 chars) | Count — only shown when URL field is mapped
 
-Export button label shows total row count: **"Export CSV (all 4,312)"**. Sends analysis params (url, parent_tag, field_map) to `/api/export_csv` — server serves from cache, no re-fetch.
+Export button label shows total row count: **"Export CSV (all 4,312)"**. Generates CSV client-side from `lastCards[cardId].all_rows` — instant, no server call.
 
-`lastAnalysisParams` stored in JS after each analysis run and reused for all export calls.
+`lastCards` stores full card data (including `all_rows`) after each analyze response.
+`lastAnalysisParams` stores input params for re-running analysis.
 
 UI: dark theme, monospace for data values, dense tool aesthetic.
 
@@ -208,11 +209,14 @@ UI: dark theme, monospace for data values, dense tool aesthetic.
 ## Rules
 
 - Single iterparse pass in Breakdown — never iterate the feed more than once per analyze call
-- `rows` (top 25) sent to frontend; `all_rows` (full) kept server-side only
+- `rows` (top 25) and `all_rows` (full) both included in analyze response; frontend uses `all_rows` for CSV export
 - `root` is always `None` — never stored, never serialized
 - `raw_bytes` is first 512 bytes only — never the full feed
 - All exceptions caught in agents — append to errors, never crash pipeline
 - No auth, no DB, no Docker, no Redis
-- URL feeds: no content stored — re-streamed on each analyze and export (served from cache after first run)
+- URL feeds: no content stored — re-streamed on each analyze call
 - Paste feeds: content stored in RAM up to 10 MB
+- URLs with embedded credentials (`user:pass@host`) handled via `agents/http_utils.py` — credentials extracted and sent as `Authorization: Basic` header
+- CPC/CPA parsing strips all currency symbols (`$`, `£`, `€`, `¥`, etc.) via `re.sub(r"[^\d.]", "", text)`
+- Nested field values (e.g. `<company><name>`) resolved via `elem.itertext()`
 - See `MEMORY.md` for field aliases, feed schemas, CPC/CPA quirks

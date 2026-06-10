@@ -1,6 +1,6 @@
 # XML Auditor
 
-A multi-agent Flask tool for auditing job feed XMLs. Paste a URL or raw XML, pick your field mappings, get aggregated cards showing counts and average CPC/CPA per title, company, and CPC value. Exports full data to CSV.
+A multi-agent Flask tool for auditing job feed XMLs. Paste a URL or raw XML, pick your field mappings, get aggregated cards showing counts and average CPC/CPA per title, company, CPC value, and job URL. Exports full data to CSV.
 
 Built for ad ops analysts doing quick feed sanity checks. Handles feeds of any size — including gzip-compressed feeds and multi-hundred-MB XML files — via streaming.
 
@@ -11,10 +11,10 @@ Built for ad ops analysts doing quick feed sanity checks. Handles feeds of any s
 **Step 1 — Probe**
 Enter a feed URL (or paste XML) and click **Probe Feed**. The tool fetches just enough to detect:
 - Root tag and parent node candidates (click a chip to select)
-- All available field tags with sample values (auto-matches title, company, CPC, CPA by name)
+- All available field tags with sample values (auto-matches title, company, CPC, CPA, and URL by name)
 
 **Step 2 — Analyze**
-Click **Run Analysis**. Six cards render:
+Map your fields — Title, Company, CPC, CPA, and optionally URL — then click **Run Analysis**. Up to seven cards render:
 
 | Card | What it shows |
 |---|---|
@@ -24,8 +24,9 @@ Click **Run Analysis**. Six cards render:
 | Company × CPC | Top 25 companies by count, with avg CPC |
 | Company × CPA | Top 25 companies by count, with avg CPA |
 | CPC Value Distribution | All distinct CPC values and how often they appear |
+| Job URL | Top 25 URLs by count, as clickable links (only shown when URL field is mapped) |
 
-Each card has an **Export CSV (all N)** button — exports every row, not just the top 25 displayed.
+Each card has an **Export CSV (all N)** button — downloads every row as a CSV instantly, generated client-side from the full dataset already in the response.
 
 **QA Summary** appears above the cards showing a confidence score and any flagged issues (missing fields, outlier CPC/CPA values, low node count, etc.).
 
@@ -39,11 +40,11 @@ Intake → Reader → Breakdown → QA → Flask → Frontend
 
 | Agent | Role |
 |---|---|
-| **Intake** | URL mode: peeks 2 bytes (gzip detect), stores URL only. Paste mode: stores content (10 MB cap). |
+| **Intake** | URL mode: peeks 2 bytes (gzip detect), stores URL only. Paste mode: stores content (10 MB cap). Handles URLs with embedded credentials (user:pass@host), including percent-encoded passwords. |
 | **Reader** | Streams full feed via `iterparse` — builds tag inventory, parent candidates, field samples. Never loads full XML into memory. |
-| **Breakdown** | Re-streams feed from URL, single iterparse pass, computes all 6 cards simultaneously. Clears each node after processing. |
-| **QA** | Scores confidence 0–1. Flags missing fields, outliers, empty feeds. |
-| **Orchestrator** | Two-level cache: post-reader metadata (15 min) + post-breakdown results (15 min). Export is instant — no re-fetch. |
+| **Breakdown** | Re-streams feed from URL, single iterparse pass, computes all 7 cards simultaneously. Clears each node after processing. Supports nested fields (e.g. `<company><name>`) via `itertext()`. |
+| **QA** | Scores confidence 0–1. Flags missing fields, outlier CPC/CPA values, empty feeds. |
+| **Orchestrator** | In-memory cache (15 min TTL): post-reader metadata cached by URL/content hash. Breakdown re-runs when field mapping changes. |
 
 ---
 
@@ -51,8 +52,9 @@ Intake → Reader → Breakdown → QA → Flask → Frontend
 
 Feeds of any size are supported. The tool streams directly into the XML parser — RAM usage stays flat regardless of feed size.
 
-- **talent.com** (1.1 GB uncompressed XML) — 300,000 nodes, ~84s on Render free tier
-- **jobget.com** (125 MB gzip) — full feed, streamed and decompressed on the fly
+- **Large uncompressed XML** (1+ GB) — tested with 300,000+ node feeds; processing time on Render free tier is roughly 60–90 seconds
+- **Gzip-compressed feeds** (100+ MB compressed) — streamed and decompressed on the fly; magic-byte detection, not relying on file extension or HTTP headers
+- **Authenticated URLs** — `user:pass@host` format supported, including percent-encoded passwords (`%2B`, `%3D`, etc.)
 - **Paste mode** — capped at 10 MB (use URL mode for large feeds)
 
 ---
@@ -136,11 +138,12 @@ xml-auditor/
 ├── render.yaml             ← Render deployment config
 ├── requirements.txt        ← flask, gunicorn
 ├── agents/
+│   ├── http_utils.py       ← Shared URL request builder (credential + encoding handling)
 │   ├── intake_agent.py     ← URL peek / paste ingest
 │   ├── reader_agent.py     ← Streaming iterparse, tag inventory
-│   ├── breakdown_agent.py  ← Streaming single-pass aggregation, 6 cards
+│   ├── breakdown_agent.py  ← Streaming single-pass aggregation, 7 cards
 │   ├── qa_agent.py         ← Confidence scoring, 7 QA checks
-│   └── orchestrator.py     ← Two-level cache, probe + pipeline entry points
+│   └── orchestrator.py     ← In-memory cache, probe + pipeline entry points
 └── templates/
     └── index.html          ← Vanilla JS, dark theme, two-step UI
 ```
