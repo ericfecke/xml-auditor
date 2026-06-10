@@ -135,7 +135,7 @@
   /* Field map grid */
   .field-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 10px;
     margin-bottom: 14px;
   }
@@ -330,6 +330,10 @@
           <label>URL field</label>
           <select id="map-url"><option value="">— none —</option></select>
         </div>
+        <div class="field-group">
+          <label>URL field 2</label>
+          <select id="map-url2"><option value="">— none —</option></select>
+        </div>
       </div>
     </div>
 
@@ -364,6 +368,7 @@ const COMPANY_ALIASES = ['company','advertiser','employer','employer_name','clie
 const CPC_ALIASES     = ['cpc','bid','cpc_value','cost_per_click','price'];
 const CPA_ALIASES     = ['cpa','revenue','cpa_value','cost_per_apply','conversion_value'];
 const URL_ALIASES     = ['url','link','apply_url','job_url','href','apply_link','detail_url','job_link'];
+const URL2_ALIASES    = ['apply_url','job_url','apply_link','detail_url','job_link','link','href','url'];
 
 // ---------------------------------------------------------------------------
 // Mode toggle
@@ -454,7 +459,8 @@ function renderProbeResult(data) {
   populateDropdown('map-company', fieldTags, COMPANY_ALIASES);
   populateDropdown('map-cpc',     fieldTags, CPC_ALIASES);
   populateDropdown('map-cpa',     fieldTags, CPA_ALIASES);
-  populateDropdown('map-url',     fieldTags, URL_ALIASES);
+  populateDropdown('map-url',      fieldTags, URL_ALIASES);
+  populateDropdown('map-url2',     fieldTags, URL2_ALIASES);
 
   // Info line
   const gzip = data.is_gzip ? ' (gzip)' : '';
@@ -497,6 +503,7 @@ async function runAnalysis() {
     cpc:     document.getElementById('map-cpc').value     || null,
     cpa:     document.getElementById('map-cpa').value     || null,
     url:     document.getElementById('map-url').value     || null,
+    url2:    document.getElementById('map-url2').value    || null,
   };
 
   document.getElementById('analyze-status').textContent = 'Analyzing…';
@@ -579,7 +586,7 @@ function renderCards(cards) {
   const grid = document.getElementById('cards-grid');
   grid.innerHTML = '';
 
-  const ORDER = ['total_count','title_cpc','title_cpa','company_cpc','company_cpa','cpc_dist','url_list'];
+  const ORDER = ['total_count','title_cpc','title_cpa','company_cpc','company_cpa','cpc_dist','url_list','url_list2'];
 
   ORDER.forEach(id => {
     const card = cards[id];
@@ -627,7 +634,7 @@ function buildCardEl(card) {
         </tbody>
       </table>
     `;
-  } else if (card.id === 'url_list') {
+  } else if (card.id === 'url_list' || card.id === 'url_list2') {
     tableHtml = `
       <table>
         <thead><tr><th>URL</th><th style="text-align:right">Count</th></tr></thead>

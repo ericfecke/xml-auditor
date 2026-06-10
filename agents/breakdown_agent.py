@@ -30,6 +30,7 @@ def run(state, parent_tag, field_map):
         cpc_tag     = field_map.get("cpc")     or ""
         cpa_tag     = field_map.get("cpa")     or ""
         url_tag     = field_map.get("url")     or ""
+        url2_tag    = field_map.get("url2")    or ""
 
         title_cpc_acc   = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         title_cpa_acc   = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
@@ -37,17 +38,19 @@ def run(state, parent_tag, field_map):
         company_cpa_acc = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         cpc_dist_acc    = defaultdict(int)
         url_acc         = defaultdict(int)
+        url2_acc        = defaultdict(int)
         node_count      = 0
 
         # Single streaming pass — never holds the full feed in memory
         for node in _iter_nodes(state, parent_tag):
             node_count += 1
 
-            title   = _get_text(node, title_tag)
-            company = _get_text(node, company_tag)
-            cpc     = _parse_numeric(node, cpc_tag)
-            cpa     = _parse_numeric(node, cpa_tag)
-            url_val = _get_text(node, url_tag) if url_tag else None
+            title    = _get_text(node, title_tag)
+            company  = _get_text(node, company_tag)
+            cpc      = _parse_numeric(node, cpc_tag)
+            cpa      = _parse_numeric(node, cpa_tag)
+            url_val  = _get_text(node, url_tag)  if url_tag  else None
+            url2_val = _get_text(node, url2_tag) if url2_tag else None
 
             title_key   = title   or "(missing)"
             company_key = company or "(missing)"
@@ -77,6 +80,8 @@ def run(state, parent_tag, field_map):
 
             if url_val:
                 url_acc[url_val] += 1
+            if url2_val:
+                url2_acc[url2_val] += 1
 
         state["node_count"] = node_count
 
@@ -91,7 +96,9 @@ def run(state, parent_tag, field_map):
             "type": "stat", "value": node_count,
         }
         if url_tag:
-            cards["url_list"] = _build_url_card(url_acc)
+            cards["url_list"]  = _build_url_card("url_list",  "Job URL",   url_acc)
+        if url2_tag:
+            cards["url_list2"] = _build_url_card("url_list2", "Job URL 2", url2_acc)
 
         state["cards"]          = cards
         state["available_tags"] = list(state.get("field_candidates", {}).keys())
@@ -223,7 +230,7 @@ def _build_cpc_dist(acc):
     }
 
 
-def _build_url_card(acc):
+def _build_url_card(card_id, label, acc):
     rows_raw = sorted(
         [{"url": v, "count": c} for v, c in acc.items()],
         key=lambda r: r["count"],
@@ -233,7 +240,7 @@ def _build_url_card(acc):
     cap = 25
     capped = total_unique > cap
     return {
-        "id": "url_list", "label": "Job URL",
+        "id": card_id, "label": label,
         "total_unique": total_unique, "capped": capped,
         "rows":     rows_raw[:cap] if capped else rows_raw,
         "all_rows": rows_raw,
