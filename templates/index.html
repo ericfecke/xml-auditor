@@ -327,6 +327,10 @@
           <select id="map-cpa"><option value="">— none —</option></select>
         </div>
         <div class="field-group">
+          <label>City field</label>
+          <select id="map-city"><option value="">— none —</option></select>
+        </div>
+        <div class="field-group">
           <label>URL field</label>
           <select id="map-url"><option value="">— none —</option></select>
         </div>
@@ -369,6 +373,7 @@ const CPC_ALIASES     = ['cpc','bid','cpc_value','cost_per_click','price'];
 const CPA_ALIASES     = ['cpa','revenue','cpa_value','cost_per_apply','conversion_value'];
 const URL_ALIASES     = ['url','link','apply_url','job_url','href','apply_link','detail_url','job_link'];
 const URL2_ALIASES    = ['apply_url','job_url','apply_link','detail_url','job_link','link','href','url'];
+const CITY_ALIASES    = ['city','location','job_location','job_city','city_name','work_location','location_name','municipality'];
 
 // ---------------------------------------------------------------------------
 // Mode toggle
@@ -459,6 +464,7 @@ function renderProbeResult(data) {
   populateDropdown('map-company', fieldTags, COMPANY_ALIASES);
   populateDropdown('map-cpc',     fieldTags, CPC_ALIASES);
   populateDropdown('map-cpa',     fieldTags, CPA_ALIASES);
+  populateDropdown('map-city',     fieldTags, CITY_ALIASES);
   populateDropdown('map-url',      fieldTags, URL_ALIASES);
   populateDropdown('map-url2',     fieldTags, URL2_ALIASES);
 
@@ -502,6 +508,7 @@ async function runAnalysis() {
     company: document.getElementById('map-company').value || null,
     cpc:     document.getElementById('map-cpc').value     || null,
     cpa:     document.getElementById('map-cpa').value     || null,
+    city:    document.getElementById('map-city').value    || null,
     url:     document.getElementById('map-url').value     || null,
     url2:    document.getElementById('map-url2').value    || null,
   };
@@ -586,7 +593,7 @@ function renderCards(cards) {
   const grid = document.getElementById('cards-grid');
   grid.innerHTML = '';
 
-  const ORDER = ['total_count','title_cpc','title_cpa','company_cpc','company_cpa','cpc_dist','url_list','url_list2'];
+  const ORDER = ['total_count','title_cpc','title_cpa','company_cpc','company_cpa','city_cpc','city_cpa','cpc_dist','url_list','url_list2'];
 
   ORDER.forEach(id => {
     const card = cards[id];
@@ -658,9 +665,10 @@ function buildCardEl(card) {
   } else {
     const isTitle = card.id.startsWith('title');
     const isCompany = card.id.startsWith('company');
+    const isCity = card.id.startsWith('city');
     const metricKey = card.id.endsWith('_cpc') ? 'avg_cpc' : 'avg_cpa';
     const metricLabel = metricKey === 'avg_cpc' ? 'Avg CPC' : 'Avg CPA';
-    const valueLabel = isTitle ? 'Title' : isCompany ? 'Company' : 'Value';
+    const valueLabel = isTitle ? 'Title' : isCompany ? 'Company' : isCity ? 'City' : 'Value';
 
     tableHtml = `
       <table>
