@@ -23,6 +23,8 @@ Map your fields — Title, Company, CPC, CPA, and optionally URL — then click 
 | Job Title × CPA | Top 25 titles by count, with avg CPA |
 | Company × CPC | Top 25 companies by count, with avg CPC |
 | Company × CPA | Top 25 companies by count, with avg CPA |
+| City × CPC | Top 25 cities by count, with avg CPC (only shown when City field is mapped) |
+| City × CPA | Top 25 cities by count, with avg CPA (only shown when City field is mapped) |
 | CPC Value Distribution | All distinct CPC values and how often they appear |
 | Job URL | Top 25 URLs by count, as clickable links (only shown when URL field is mapped) |
 
@@ -42,7 +44,7 @@ Intake → Reader → Breakdown → QA → Flask → Frontend
 |---|---|
 | **Intake** | URL mode: detects gzip and stores URL only (HTTP peeks 2 bytes; FTP uses file extension). Paste mode: stores content (10 MB cap). |
 | **Reader** | Streams full feed via `iterparse` — builds tag inventory, parent candidates, field samples. Never loads full XML into memory. Works over HTTP, HTTPS, and FTP. |
-| **Breakdown** | Re-streams feed, single iterparse pass, computes all 7 cards simultaneously. Clears each node after processing. Supports nested fields (e.g. `<company><name>`) via `itertext()`. |
+| **Breakdown** | Re-streams feed, single iterparse pass, computes all cards simultaneously. Clears each node after processing. Supports nested fields (e.g. `<company><name>`) via `itertext()`. |
 | **QA** | Scores confidence 0–1. Flags missing fields, outlier CPC/CPA values, empty feeds. |
 | **Orchestrator** | In-memory cache (15 min TTL): post-reader metadata cached by URL/content hash. Breakdown re-runs when field mapping changes. |
 

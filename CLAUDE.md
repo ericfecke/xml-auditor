@@ -90,7 +90,7 @@ Re-streams the full feed in a single `iterparse` pass. Never calls `root.iter()`
 
 `_iter_nodes(state, parent_tag)` yields each fully-parsed parent element at its "end" event, then calls `elem.clear()`. This keeps RAM flat regardless of feed size.
 
-Single pass accumulates all 6 cards simultaneously. Each card stores both:
+Single pass accumulates all cards simultaneously. Each card stores both:
 - `rows` — top 25 by count (for UI display)
 - `all_rows` — all rows uncapped (for CSV export)
 
@@ -135,7 +135,7 @@ Breakdown always re-streams the URL — it does not use cached content. `all_row
 
 ## Card Spec
 
-Six fixed cards. Computed in a single iterparse pass by Breakdown agent.
+Fixed cards. Computed in a single iterparse pass by Breakdown agent. City and URL cards are conditional — only built when the field is mapped.
 
 ```python
 DEFAULT_CARDS = [
@@ -143,8 +143,10 @@ DEFAULT_CARDS = [
     {"id": "title_cpa",   "label": "Job Title × CPA",          "group_by": "title",   "metrics": ["count", "avg_cpa"], "sort_by": "count", "cap": 25},
     {"id": "company_cpc", "label": "Company × CPC",            "group_by": "company", "metrics": ["count", "avg_cpc"], "sort_by": "count", "cap": 25},
     {"id": "company_cpa", "label": "Company × CPA",            "group_by": "company", "metrics": ["count", "avg_cpa"], "sort_by": "count", "cap": 25},
+    {"id": "city_cpc",    "label": "City × CPC",               "group_by": "city",    "metrics": ["count", "avg_cpc"], "sort_by": "count", "cap": 25, "conditional": True},
+    {"id": "city_cpa",    "label": "City × CPA",               "group_by": "city",    "metrics": ["count", "avg_cpa"], "sort_by": "count", "cap": 25, "conditional": True},
     {"id": "cpc_dist",    "label": "CPC Value Distribution",   "group_by": "cpc",     "metrics": ["count"],            "sort_by": "cpc_value_asc", "cap": None},
-    {"id": "url_list",    "label": "Job URL",                  "group_by": "url",     "metrics": ["count"],            "sort_by": "count", "cap": 25},
+    {"id": "url_list",    "label": "Job URL",                  "group_by": "url",     "metrics": ["count"],            "sort_by": "count", "cap": 25, "conditional": True},
     {"id": "total_count", "label": "Total Node Count",         "type": "stat",        "value_key": "node_count"},
 ]
 ```
@@ -174,7 +176,7 @@ Each non-stat card result shape (server-side):
 | `POST /api/analyze` | `{url?, xml_text?, parent_tag, field_map}` | `{node_count, cards (includes all_rows), qa_flags, confidence, errors}` |
 | `POST /api/export_csv` | `{card_id, rows}` | streaming CSV — legacy endpoint, no longer used by default UI |
 
-`field_map` shape: `{"title": "job_title", "company": "advertiser", "cpc": "cpc", "cpa": "cpa", "url": "url"}`
+`field_map` shape: `{"title": "job_title", "company": "advertiser", "cpc": "cpc", "cpa": "cpa", "city": "location", "url": "url"}`
 
 CSV export is handled client-side: the frontend stores `all_rows` from the analyze response in `lastCards` and generates the CSV in the browser on demand.
 

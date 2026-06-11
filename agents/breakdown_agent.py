@@ -29,11 +29,14 @@ def run(state, parent_tag, field_map):
         cpa_tag     = field_map.get("cpa")     or ""
         url_tag     = field_map.get("url")     or ""
         url2_tag    = field_map.get("url2")    or ""
+        city_tag    = field_map.get("city")    or ""
 
         title_cpc_acc   = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         title_cpa_acc   = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         company_cpc_acc = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         company_cpa_acc = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
+        city_cpc_acc    = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
+        city_cpa_acc    = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         cpc_dist_acc    = defaultdict(int)
         url_acc         = defaultdict(int)
         url2_acc        = defaultdict(int)
@@ -49,9 +52,11 @@ def run(state, parent_tag, field_map):
             cpa      = _parse_numeric(node, cpa_tag)
             url_val  = _get_text(node, url_tag)  if url_tag  else None
             url2_val = _get_text(node, url2_tag) if url2_tag else None
+            city_val = _get_text(node, city_tag) if city_tag else None
 
             title_key   = title   or "(missing)"
             company_key = company or "(missing)"
+            city_key    = city_val or "(missing)"
 
             title_cpc_acc[title_key]["count"] += 1
             if cpc is not None:
@@ -81,6 +86,17 @@ def run(state, parent_tag, field_map):
             if url2_val:
                 url2_acc[url2_val] += 1
 
+            if city_tag:
+                city_cpc_acc[city_key]["count"] += 1
+                if cpc is not None:
+                    city_cpc_acc[city_key]["sum"] += cpc
+                    city_cpc_acc[city_key]["has_metric"] = True
+
+                city_cpa_acc[city_key]["count"] += 1
+                if cpa is not None:
+                    city_cpa_acc[city_key]["sum"] += cpa
+                    city_cpa_acc[city_key]["has_metric"] = True
+
         state["node_count"] = node_count
 
         cards = {}
@@ -93,6 +109,9 @@ def run(state, parent_tag, field_map):
             "id": "total_count", "label": "Total Node Count",
             "type": "stat", "value": node_count,
         }
+        if city_tag:
+            cards["city_cpc"] = _build_card("city_cpc", "City × CPC", city_cpc_acc, "avg_cpc", cap=25)
+            cards["city_cpa"] = _build_card("city_cpa", "City × CPA", city_cpa_acc, "avg_cpa", cap=25)
         if url_tag:
             cards["url_list"]  = _build_url_card("url_list",  "Job URL",   url_acc)
         if url2_tag:
