@@ -25,22 +25,22 @@ def set_cache(key, state):
     FEED_CACHE[key] = {"state": state, "cached_at": time.time()}
 
 
-def _breakdown_cache_key(reader_key, parent_tag, field_map):
-    sig = json.dumps({"k": reader_key, "p": parent_tag, "f": field_map}, sort_keys=True)
+def _breakdown_cache_key(reader_key, parent_tag, field_map, filters=None):
+    sig = json.dumps({"k": reader_key, "p": parent_tag, "f": field_map, "q": filters or {}}, sort_keys=True)
     return hashlib.sha256(sig.encode()).hexdigest()
 
 
-def get_breakdown_cached(url, xml_text, parent_tag, field_map):
+def get_breakdown_cached(url, xml_text, parent_tag, field_map, filters=None):
     reader_key = _cache_key_for(url, xml_text)
-    bd_key = _breakdown_cache_key(reader_key, parent_tag, field_map or {})
+    bd_key = _breakdown_cache_key(reader_key, parent_tag, field_map or {}, filters or {})
     entry = BREAKDOWN_CACHE.get(bd_key)
     if entry and time.time() - entry["cached_at"] < CACHE_TTL:
         return entry["state"]
     return None
 
 
-def _set_breakdown_cache(reader_key, parent_tag, field_map, state):
-    bd_key = _breakdown_cache_key(reader_key, parent_tag, field_map or {})
+def _set_breakdown_cache(reader_key, parent_tag, field_map, state, filters=None):
+    bd_key = _breakdown_cache_key(reader_key, parent_tag, field_map or {}, filters or {})
     BREAKDOWN_CACHE[bd_key] = {"state": state, "cached_at": time.time()}
 
 
@@ -118,9 +118,10 @@ def probe_feed(url=None, xml_text=None):
     return state
 
 
-def run_pipeline(url=None, xml_text=None, parent_tag=None, field_map=None):
+def run_pipeline(url=None, xml_text=None, parent_tag=None, field_map=None, filters=None):
     """Full pipeline: intake → reader (cached) → breakdown → qa."""
     field_map = field_map or {}
+    filters   = {k: v for k, v in (filters or {}).items() if v}
     state = _build_initial_state()
 
     pre_key = _cache_key_for(url, xml_text)
@@ -141,12 +142,12 @@ def run_pipeline(url=None, xml_text=None, parent_tag=None, field_map=None):
         if pre_key and pre_key != cache_key:
             set_cache(pre_key, deepcopy(state))
 
-    # Breakdown and QA always re-run (field_map can differ between calls)
-    state = breakdown_agent.run(state, parent_tag=parent_tag, field_map=field_map)
+    # Breakdown and QA always re-run (field_map/filters can differ between calls)
+    state = breakdown_agent.run(state, parent_tag=parent_tag, field_map=field_map, filters=filters)
     state = qa_agent.run(state)
 
     # Cache breakdown result so export is instant (no re-fetch)
     reader_key = state.get("cache_key") or pre_key
-    _set_breakdown_cache(reader_key, parent_tag, field_map, deepcopy(state))
+    _set_breakdown_cache(reader_key, parent_tag, field_map, deepcopy(state), filters=filters)
 
     return state
