@@ -90,6 +90,8 @@ Re-streams the full feed in a single `iterparse` pass. Never calls `root.iter()`
 
 `_iter_nodes(state, parent_tag)` yields each fully-parsed parent element at its "end" event, then calls `elem.clear()`. This keeps RAM flat regardless of feed size.
 
+Accepts an optional `filters` dict — skips nodes that don't match before accumulating. Filterable fields: `title`, `company`, `city` (case-insensitive exact match). Empty or absent `filters` = no filtering.
+
 Single pass accumulates all cards simultaneously. Each card stores both:
 - `rows` — top 25 by count (for UI display)
 - `all_rows` — all rows uncapped (for CSV export)
@@ -124,9 +126,9 @@ CACHE_TTL  = 900  # 15 minutes
 2. Run intake → reader
 3. Store in `FEED_CACHE`
 
-**run_pipeline(url, xml_text, parent_tag, field_map):**
+**run_pipeline(url, xml_text, parent_tag, field_map, filters={}):**
 1. Check `FEED_CACHE` for reader state — run intake + reader if miss
-2. Run breakdown + QA (always — field_map can differ between calls)
+2. Run breakdown + QA (always — field_map/filters can differ between calls)
 3. Return state
 
 Breakdown always re-streams the URL — it does not use cached content. `all_rows` from each card is included in the analyze response and used client-side for CSV export (no server round-trip needed).
@@ -173,10 +175,12 @@ Each non-stat card result shape (server-side):
 |---|---|---|
 | `GET /` | — | `index.html` |
 | `POST /api/probe` | `{url?, xml_text?}` | `{root_tag, is_gzip, parent_candidates, field_candidates, errors}` |
-| `POST /api/analyze` | `{url?, xml_text?, parent_tag, field_map}` | `{node_count, cards (includes all_rows), qa_flags, confidence, errors}` |
+| `POST /api/analyze` | `{url?, xml_text?, parent_tag, field_map, filters?}` | `{node_count, cards (includes all_rows), qa_flags, confidence, errors}` |
 | `POST /api/export_csv` | `{card_id, rows}` | streaming CSV — legacy endpoint, no longer used by default UI |
 
 `field_map` shape: `{"title": "job_title", "company": "advertiser", "cpc": "cpc", "cpa": "cpa", "city": "location", "url": "url"}`
+
+`filters` shape (optional): `{"city": "New York"}` — at most one key/value; case-insensitive exact match applied at node level during streaming. Empty dict = no filter.
 
 CSV export is handled client-side: the frontend stores `all_rows` from the analyze response in `lastCards` and generates the CSV in the browser on demand.
 
@@ -184,27 +188,32 @@ CSV export is handled client-side: the frontend stores `all_rows` from the analy
 
 ## Frontend (`templates/index.html`)
 
-Vanilla JS, no frameworks. Two steps:
+Vanilla JS, no frameworks. Two steps + optional filter:
 
 **Step 1 — Probe**
 URL input or paste toggle → "Probe Feed" → shows:
 - Detected parent node chips (click to select, first auto-selected)
-- Field mapping dropdowns: Title, Company, CPC, CPA (auto-matched by alias from `field_candidates`)
+- Field mapping dropdowns: Title, Company, CPC, CPA, City, URL (auto-matched by alias from `field_candidates`)
 
 **Step 2 — Analyze**
-"Run Analysis" → up to 7 cards render at once from single JSON response.
+"Run Analysis" → up to 9 cards render at once from single JSON response.
 
 Each card renders as a compact table. Total Count card renders as a single large stat.
 
 Card table columns:
-- Title/Company cards: Value | Count | Avg CPC or Avg CPA (show `—` for null)
+- Title/Company/City cards: Value | Count | Avg CPC or Avg CPA (show `—` for null)
 - CPC dist card: CPC Value | Count
 - URL card: URL (clickable link, truncated at 70 chars) | Count — only shown when URL field is mapped
+- City cards: only shown when City field is mapped
+
+**Filter bar (optional, Step 3)**
+After results load, a filter bar appears. User picks a field (Title, Company, City) and a value populated from `lastCards`. Clicking Apply re-calls `/api/analyze` with `filters: {field: value}` — the backend re-streams and skips non-matching nodes. Active filter shown as a badge; Clear Filter resets to full view. `activeFilters` global tracks current state; "Run Analysis" always clears it.
 
 Export button label shows total row count: **"Export CSV (all 4,312)"**. Generates CSV client-side from `lastCards[cardId].all_rows` — instant, no server call.
 
 `lastCards` stores full card data (including `all_rows`) after each analyze response.
 `lastAnalysisParams` stores input params for re-running analysis.
+`activeFilters` stores current filter state `{field_key: value}` — at most one entry.
 
 UI: dark theme, monospace for data values, dense tool aesthetic.
 

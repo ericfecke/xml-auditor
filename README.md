@@ -14,7 +14,7 @@ Enter a feed URL (or paste XML) and click **Probe Feed**. The tool fetches just 
 - All available field tags with sample values (auto-matches title, company, CPC, CPA, and URL by name)
 
 **Step 2 — Analyze**
-Map your fields — Title, Company, CPC, CPA, and optionally URL — then click **Run Analysis**. Up to seven cards render:
+Map your fields — Title, Company, CPC, CPA, City, and optionally URL — then click **Run Analysis**. Up to nine cards render:
 
 | Card | What it shows |
 |---|---|
@@ -29,6 +29,9 @@ Map your fields — Title, Company, CPC, CPA, and optionally URL — then click 
 | Job URL | Top 25 URLs by count, as clickable links (only shown when URL field is mapped) |
 
 Each card has an **Export CSV (all N)** button — downloads every row as a CSV instantly, generated client-side from the full dataset already in the response.
+
+**Step 3 — Filter (optional)**
+After results load, a filter bar appears above the cards. Pick a field (Title, Company, or City) and a value — clicking **Apply** re-streams the feed and recomputes all cards for only the matching jobs. A badge shows the active filter; **Clear Filter** returns to the full view.
 
 **QA Summary** appears above the cards showing a confidence score and any flagged issues (missing fields, outlier CPC/CPA values, low node count, etc.).
 

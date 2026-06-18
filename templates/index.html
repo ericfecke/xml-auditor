@@ -266,6 +266,32 @@
   /* Status */
   .status-line { font-size: 11px; color: var(--text-dim); padding: 4px 0; }
 
+  /* Filter bar controls */
+  .filter-ctl {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 5px 8px;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+  }
+  .filter-ctl:focus { border-color: var(--accent); }
+  .filter-ctl:disabled { opacity: 0.4; cursor: not-allowed; }
+  #filter-value { min-width: 220px; }
+
+  .filter-badge {
+    font-size: 11px;
+    color: var(--accent);
+    padding: 3px 10px;
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    letter-spacing: 0.02em;
+  }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -341,7 +367,7 @@
       </div>
     </div>
 
-    <button class="btn" id="btn-analyze" onclick="runAnalysis()" disabled>Run Analysis</button>
+    <button class="btn" id="btn-analyze" onclick="runAnalysis({})" disabled>Run Analysis</button>
     <span id="analyze-status" class="status-line" style="display:inline-block;margin-left:10px;"></span>
   </div>
 
@@ -349,6 +375,22 @@
   <div class="hidden" id="panel-results">
     <!-- QA Summary -->
     <div class="panel" id="qa-panel"></div>
+
+    <!-- Filter Bar -->
+    <div class="panel hidden" id="filter-panel">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);">Filter by</span>
+        <select class="filter-ctl" id="filter-field" onchange="onFilterFieldChange()">
+          <option value="">— field —</option>
+        </select>
+        <select class="filter-ctl" id="filter-value" disabled>
+          <option value="">— value —</option>
+        </select>
+        <button class="btn btn-sm" id="btn-apply-filter" onclick="applyFilter()" disabled>Apply</button>
+        <button class="btn btn-sm btn-ghost hidden" id="btn-clear-filter" onclick="clearFilter()">Clear Filter</button>
+        <span id="filter-badge" class="filter-badge hidden"></span>
+      </div>
+    </div>
 
     <!-- Cards -->
     <div class="cards-grid" id="cards-grid"></div>
@@ -366,6 +408,7 @@ let probeData = null;
 let lastInputPayload = null;   // {url?, xml_text?}
 let lastAnalysisParams = null; // {url?, xml_text?, parent_tag, field_map} — for export
 let lastCards = {};            // full card data including all_rows — for CSV export
+let activeFilters = {};        // {field_key: value} — at most one entry for now
 
 const TITLE_ALIASES   = ['title','job_title','jobtitle','position','job_name'];
 const COMPANY_ALIASES = ['company','advertiser','employer','employer_name','client'];
@@ -500,8 +543,11 @@ function populateDropdown(selectId, tags, aliases) {
 // ---------------------------------------------------------------------------
 // Step 2: Analyze
 // ---------------------------------------------------------------------------
-async function runAnalysis() {
+async function runAnalysis(filtersOverride) {
   if (!selectedParent) return;
+
+  // filtersOverride=undefined → keep activeFilters; pass {} to clear
+  if (filtersOverride !== undefined) activeFilters = filtersOverride;
 
   const field_map = {
     title:   document.getElementById('map-title').value   || null,
@@ -520,8 +566,12 @@ async function runAnalysis() {
   document.getElementById('qa-panel').innerHTML = '';
 
   try {
-    const body = Object.assign({}, lastInputPayload, {parent_tag: selectedParent, field_map});
-    lastAnalysisParams = body;   // store for export
+    const body = Object.assign({}, lastInputPayload, {
+      parent_tag: selectedParent,
+      field_map,
+      filters: activeFilters,
+    });
+    lastAnalysisParams = body;
 
     const resp = await fetch('/api/analyze', {
       method: 'POST',
@@ -537,10 +587,110 @@ async function runAnalysis() {
     lastCards = data.cards || {};
     renderQA(data);
     renderCards(lastCards);
+    renderFilterBar();
   } catch(e) {
     document.getElementById('analyze-status').textContent = 'Error: ' + e.message;
     document.getElementById('btn-analyze').disabled = false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Filter bar
+// ---------------------------------------------------------------------------
+
+const FILTER_FIELDS = [
+  {key: 'title',   label: 'Title',   cardId: 'title_cpc'},
+  {key: 'company', label: 'Company', cardId: 'company_cpc'},
+  {key: 'city',    label: 'City',    cardId: 'city_cpc'},
+];
+
+function renderFilterBar() {
+  const panel     = document.getElementById('filter-panel');
+  const fieldSel  = document.getElementById('filter-field');
+  const valueSel  = document.getElementById('filter-value');
+  const applyBtn  = document.getElementById('btn-apply-filter');
+  const clearBtn  = document.getElementById('btn-clear-filter');
+  const badge     = document.getElementById('filter-badge');
+
+  const fm = (lastAnalysisParams && lastAnalysisParams.field_map) || {};
+
+  // Only show fields that are mapped AND have card data
+  const available = FILTER_FIELDS.filter(f => fm[f.key] && lastCards[f.cardId]);
+  if (!available.length) { panel.classList.add('hidden'); return; }
+
+  panel.classList.remove('hidden');
+
+  // Rebuild field dropdown
+  fieldSel.innerHTML = '<option value="">— field —</option>';
+  available.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.key; opt.textContent = f.label;
+    fieldSel.appendChild(opt);
+  });
+
+  const activeKey = Object.keys(activeFilters)[0] || '';
+  const activeVal = activeFilters[activeKey] || '';
+
+  if (activeKey && activeVal) {
+    fieldSel.value = activeKey;
+    _populateFilterValues(activeKey, activeVal);
+    const label = (FILTER_FIELDS.find(f => f.key === activeKey) || {}).label || activeKey;
+    badge.textContent = `${label} = "${activeVal}"`;
+    badge.classList.remove('hidden');
+    clearBtn.classList.remove('hidden');
+  } else {
+    valueSel.innerHTML = '<option value="">— value —</option>';
+    valueSel.disabled = true;
+    applyBtn.disabled = true;
+    badge.classList.add('hidden');
+    clearBtn.classList.add('hidden');
+  }
+}
+
+function _populateFilterValues(fieldKey, selectedVal) {
+  const valueSel = document.getElementById('filter-value');
+  const applyBtn = document.getElementById('btn-apply-filter');
+
+  const fieldInfo = FILTER_FIELDS.find(f => f.key === fieldKey);
+  const card = fieldInfo && lastCards[fieldInfo.cardId];
+  const rows = (card && (card.all_rows || card.rows)) || [];
+
+  valueSel.innerHTML = '<option value="">— value —</option>';
+  rows.forEach(r => {
+    if (!r.value || r.value === '(missing)') return;
+    const opt = document.createElement('option');
+    opt.value = r.value;
+    opt.textContent = r.value.length > 60 ? r.value.slice(0, 57) + '…' : r.value;
+    valueSel.appendChild(opt);
+  });
+
+  if (selectedVal) valueSel.value = selectedVal;
+  valueSel.disabled = false;
+  applyBtn.disabled = false;
+}
+
+function onFilterFieldChange() {
+  const fieldKey = document.getElementById('filter-field').value;
+  const valueSel = document.getElementById('filter-value');
+  const applyBtn = document.getElementById('btn-apply-filter');
+  if (!fieldKey) {
+    valueSel.innerHTML = '<option value="">— value —</option>';
+    valueSel.disabled = true;
+    applyBtn.disabled = true;
+    return;
+  }
+  _populateFilterValues(fieldKey, '');
+}
+
+function applyFilter() {
+  const field = document.getElementById('filter-field').value;
+  const value = document.getElementById('filter-value').value;
+  if (!field || !value) return;
+  runAnalysis({[field]: value});
+}
+
+function clearFilter() {
+  runAnalysis({});
 }
 
 // ---------------------------------------------------------------------------

@@ -7,8 +7,9 @@ from copy import deepcopy
 from .http_utils import open_stream
 
 
-def run(state, parent_tag, field_map):
+def run(state, parent_tag, field_map, filters=None):
     state = deepcopy(state)
+    filters = {k: v for k, v in (filters or {}).items() if v}  # drop empty values
     try:
         url     = state.get("source_url")
         content = state.get("content_bytes", b"")
@@ -53,6 +54,11 @@ def run(state, parent_tag, field_map):
             url_val  = _get_text(node, url_tag)  if url_tag  else None
             url2_val = _get_text(node, url2_tag) if url2_tag else None
             city_val = _get_text(node, city_tag) if city_tag else None
+
+            if filters and not _matches_filters(filters, {
+                "title": title, "company": company, "city": city_val,
+            }):
+                continue
 
             title_key   = title   or "(missing)"
             company_key = company or "(missing)"
@@ -208,6 +214,19 @@ def _parse_numeric(node, tag):
         return float(cleaned)
     except ValueError:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Filter helper
+# ---------------------------------------------------------------------------
+
+def _matches_filters(filters, field_values):
+    """Return True if all filter criteria are satisfied (case-insensitive)."""
+    for key, wanted in filters.items():
+        actual = (field_values.get(key) or "").strip().lower()
+        if actual != wanted.strip().lower():
+            return False
+    return True
 
 
 # ---------------------------------------------------------------------------

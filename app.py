@@ -42,12 +42,14 @@ def analyze():
     xml_text = data.get("xml_text") or None
     parent_tag = data.get("parent_tag", "")
     field_map = data.get("field_map") or {}
+    filters = data.get("filters") or {}
 
     state = orchestrator.run_pipeline(
         url=url,
         xml_text=xml_text,
         parent_tag=parent_tag,
         field_map=field_map,
+        filters=filters,
     )
 
     # Strip all_rows before sending to frontend — kept server-side for export
@@ -73,14 +75,15 @@ def export_csv():
     xml_text   = data.get("xml_text") or None
     parent_tag = data.get("parent_tag", "")
     field_map  = data.get("field_map") or {}
+    filters    = data.get("filters") or {}
 
     # Look up cached breakdown state — no re-fetch needed
-    state = orchestrator.get_breakdown_cached(url, xml_text, parent_tag, field_map)
+    state = orchestrator.get_breakdown_cached(url, xml_text, parent_tag, field_map, filters=filters)
     if state is None:
         # Fallback: re-run (handles edge cases like cache expiry)
         state = orchestrator.run_pipeline(
             url=url, xml_text=xml_text,
-            parent_tag=parent_tag, field_map=field_map,
+            parent_tag=parent_tag, field_map=field_map, filters=filters,
         )
 
     card = state.get("cards", {}).get(card_id, {})
