@@ -871,11 +871,27 @@ function buildCardEl(card) {
 // Export field names — all unique XML tags from the full feed (tag_inventory)
 // ---------------------------------------------------------------------------
 function exportFieldNames() {
-  const inventory = (probeData && probeData.tag_inventory) || {};
-  const names = Object.keys(inventory).sort();
+  const inventory   = (probeData && probeData.tag_inventory)    || {};
+  const candidates  = (probeData && probeData.field_candidates) || {};
+  const parents     = (probeData && probeData.parent_candidates) || {};
+  const rootTag     = (probeData && probeData.root_tag) || '';
+
+  // Exclude the root tag and container/parent nodes (job, item, etc.) —
+  // we only want the fields nested inside those containers.
+  const names = Object.keys(inventory)
+    .filter(t => t !== rootTag && !parents[t])
+    .sort();
   if (!names.length) return;
 
-  const lines = ['field_name', ...names];
+  const lines = ['field_name,value'];
+  names.forEach(name => {
+    const sample = (candidates[name] && candidates[name][0]) || '';
+    const escaped = sample.includes(',') || sample.includes('"') || sample.includes('\n')
+      ? `"${sample.replace(/"/g, '""')}"`
+      : sample;
+    lines.push(`${name},${escaped}`);
+  });
+
   const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
