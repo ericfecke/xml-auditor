@@ -871,11 +871,20 @@ function buildCardEl(card) {
 // Export field names — all unique XML tags from the full feed (tag_inventory)
 // ---------------------------------------------------------------------------
 function exportFieldNames() {
-  const inventory = (probeData && probeData.tag_inventory) || {};
+  const inventory  = (probeData && probeData.tag_inventory)  || {};
+  const candidates = (probeData && probeData.field_candidates) || {};
   const names = Object.keys(inventory).sort();
   if (!names.length) return;
 
-  const lines = ['field_name', ...names];
+  const lines = ['field_name,value'];
+  names.forEach(name => {
+    const sample = (candidates[name] && candidates[name][0]) || '';
+    const escaped = sample.includes(',') || sample.includes('"') || sample.includes('\n')
+      ? `"${sample.replace(/"/g, '""')}"`
+      : sample;
+    lines.push(`${name},${escaped}`);
+  });
+
   const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
