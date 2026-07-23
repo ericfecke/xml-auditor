@@ -368,6 +368,7 @@
     </div>
 
     <button class="btn" id="btn-analyze" onclick="runAnalysis({})" disabled>Run Analysis</button>
+    <button class="btn btn-ghost" id="btn-export-fields" onclick="exportFieldNames()" style="margin-left:8px;" disabled>Export Field Names</button>
     <span id="analyze-status" class="status-line" style="display:inline-block;margin-left:10px;"></span>
   </div>
 
@@ -500,6 +501,9 @@ function renderProbeResult(data) {
     const firstChip = chipRow.querySelector('.chip');
     selectParent(sorted[0][0], firstChip);
   }
+
+  // Enable field name export now that probe data is loaded
+  document.getElementById('btn-export-fields').disabled = false;
 
   // Field mapping dropdowns
   const fieldTags = Object.keys(data.field_candidates || {});
@@ -861,6 +865,26 @@ function buildCardEl(card) {
   `;
 
   return div;
+}
+
+// ---------------------------------------------------------------------------
+// Export field names — all unique XML tags from the full feed (tag_inventory)
+// ---------------------------------------------------------------------------
+function exportFieldNames() {
+  const inventory = (probeData && probeData.tag_inventory) || {};
+  const names = Object.keys(inventory).sort();
+  if (!names.length) return;
+
+  const lines = ['field_name', ...names];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'field_names.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ---------------------------------------------------------------------------

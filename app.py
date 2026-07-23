@@ -31,6 +31,7 @@ def probe():
         "is_gzip": state.get("is_gzip", False),
         "parent_candidates": state.get("parent_candidates", {}),
         "field_candidates": state.get("field_candidates", {}),
+        "tag_inventory": state.get("tag_inventory", {}),
         "errors": state.get("errors", []),
     })
 
