@@ -257,6 +257,9 @@ def _build_cpc_dist(acc):
         [{"cpc_value": v, "count": c} for v, c in acc.items()],
         key=lambda r: r["cpc_value"],
     )
+    total = sum(r["count"] for r in rows)
+    for r in rows:
+        r["pct_of_total"] = round(r["count"] / total * 100, 1) if total > 0 else 0.0
     return {
         "id": "cpc_dist", "label": "CPC Value Distribution",
         "total_unique": len(rows), "capped": False,
