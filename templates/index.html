@@ -784,12 +784,13 @@ function buildCardEl(card) {
   if (card.id === 'cpc_dist') {
     tableHtml = `
       <table>
-        <thead><tr><th>CPC Value</th><th style="text-align:right">Count</th></tr></thead>
+        <thead><tr><th>CPC Value</th><th style="text-align:right">Count</th><th style="text-align:right">% of Total</th></tr></thead>
         <tbody>
           ${rows.map(r => `
             <tr>
               <td class="num">${r.cpc_value != null ? r.cpc_value.toFixed(4) : '—'}</td>
               <td class="num">${(r.count||0).toLocaleString()}</td>
+              <td class="num">${r.pct_of_total != null ? r.pct_of_total.toFixed(1) + '%' : '—'}</td>
             </tr>
           `).join('')}
         </tbody>
