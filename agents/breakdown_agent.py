@@ -31,6 +31,7 @@ def run(state, parent_tag, field_map, filters=None):
         url_tag     = field_map.get("url")     or ""
         url2_tag    = field_map.get("url2")    or ""
         city_tag    = field_map.get("city")    or ""
+        country_tag = field_map.get("country") or ""
 
         title_cpc_acc   = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         title_cpa_acc   = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
@@ -38,6 +39,7 @@ def run(state, parent_tag, field_map, filters=None):
         company_cpa_acc = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         city_cpc_acc    = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         city_cpa_acc    = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
+        country_acc     = defaultdict(int)
         cpc_dist_acc    = defaultdict(int)
         url_acc         = defaultdict(int)
         url2_acc        = defaultdict(int)
@@ -51,9 +53,10 @@ def run(state, parent_tag, field_map, filters=None):
             company  = _get_text(node, company_tag)
             cpc      = _parse_numeric(node, cpc_tag)
             cpa      = _parse_numeric(node, cpa_tag)
-            url_val  = _get_text(node, url_tag)  if url_tag  else None
-            url2_val = _get_text(node, url2_tag) if url2_tag else None
-            city_val = _get_text(node, city_tag) if city_tag else None
+            url_val     = _get_text(node, url_tag)     if url_tag     else None
+            url2_val    = _get_text(node, url2_tag)    if url2_tag    else None
+            city_val    = _get_text(node, city_tag)    if city_tag    else None
+            country_val = _get_text(node, country_tag) if country_tag else None
 
             if filters and not _matches_filters(filters, {
                 "title": title, "company": company, "city": city_val,
@@ -92,6 +95,9 @@ def run(state, parent_tag, field_map, filters=None):
             if url2_val:
                 url2_acc[url2_val] += 1
 
+            if country_tag and country_val:
+                country_acc[country_val] += 1
+
             if city_tag:
                 city_cpc_acc[city_key]["count"] += 1
                 if cpc is not None:
@@ -118,6 +124,8 @@ def run(state, parent_tag, field_map, filters=None):
         if city_tag:
             cards["city_cpc"] = _build_card("city_cpc", "City × CPC", city_cpc_acc, "avg_cpc", cap=25)
             cards["city_cpa"] = _build_card("city_cpa", "City × CPA", city_cpa_acc, "avg_cpa", cap=25)
+        if country_tag:
+            cards["country_count"] = _build_count_card("country_count", "Country × Count", country_acc)
         if url_tag:
             cards["url_list"]  = _build_url_card("url_list",  "Job URL",   url_acc)
         if url2_tag:
@@ -264,6 +272,23 @@ def _build_cpc_dist(acc):
         "id": "cpc_dist", "label": "CPC Value Distribution",
         "total_unique": len(rows), "capped": False,
         "rows": rows, "all_rows": rows,
+    }
+
+
+def _build_count_card(card_id, label, acc):
+    rows_raw = sorted(
+        [{"value": v, "count": c} for v, c in acc.items()],
+        key=lambda r: r["count"],
+        reverse=True,
+    )
+    total_unique = len(rows_raw)
+    cap = 25
+    capped = total_unique > cap
+    return {
+        "id": card_id, "label": label,
+        "total_unique": total_unique, "capped": capped,
+        "rows":     rows_raw[:cap] if capped else rows_raw,
+        "all_rows": rows_raw,
     }
 
 
