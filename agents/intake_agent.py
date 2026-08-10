@@ -7,7 +7,7 @@ from copy import deepcopy
 
 from .http_utils import build_request, hostname_from_url, is_ftp
 
-PASTE_MAX = 10 * 1024 * 1024   # 10 MB cap on raw paste (URL feeds stream — no cap)
+PASTE_MAX = 50 * 1024 * 1024   # 50 MB cap on paste/file upload (URL feeds stream — no cap)
 
 
 def run(state, url=None, xml_text=None):
@@ -31,7 +31,7 @@ def run(state, url=None, xml_text=None):
                 raw = raw[:PASTE_MAX]
                 state["errors"].append({
                     "agent": "intake",
-                    "message": "Paste exceeds 10 MB — truncated. Use a URL for large feeds.",
+                    "message": "Content exceeds 50 MB — truncated. Use a URL for large feeds.",
                     "severity": "warn",
                 })
             is_gzip = raw[:2] == b"\x1f\x8b"
