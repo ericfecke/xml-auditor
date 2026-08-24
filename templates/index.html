@@ -950,38 +950,32 @@ function exportFieldNames() {
 }
 
 // ---------------------------------------------------------------------------
-// Export — client-side CSV from all_rows (already in analyze response)
+// Export — server-side streaming CSV via /api/export_csv
 // ---------------------------------------------------------------------------
-function exportCard(cardId) {
-  const card = lastCards[cardId];
-  if (!card) return;
-  const rows = card.all_rows || card.rows || [];
-  if (!rows.length) return;
+async function exportCard(cardId) {
+  if (!lastAnalysisParams) return;
+  const body = Object.assign({}, lastAnalysisParams, { card_id: cardId });
 
-  const headers = Object.keys(rows[0]);
-  const lines   = [headers.join(',')];
+  try {
+    const resp = await fetch('/api/export_csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) return;
 
-  rows.forEach(row => {
-    lines.push(headers.map(h => {
-      const v = row[h];
-      if (v == null) return '';
-      const s = String(v);
-      // Quote fields that contain commas, quotes, or newlines
-      return (s.includes(',') || s.includes('"') || s.includes('\n'))
-        ? `"${s.replace(/"/g, '""')}"`
-        : s;
-    }).join(','));
-  });
-
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = cardId + '.csv';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = cardId + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('Export failed:', e);
+  }
 }
 
 // ---------------------------------------------------------------------------

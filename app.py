@@ -57,9 +57,13 @@ def analyze():
             filters=filters,
         )
 
+        cards = {}
+        for card_id, card in state.get("cards", {}).items():
+            cards[card_id] = {k: v for k, v in card.items() if k != "all_rows"}
+
         return jsonify({
             "node_count": state.get("node_count", 0),
-            "cards": state.get("cards", {}),
+            "cards": cards,
             "qa_flags": state.get("qa_flags", []),
             "confidence": state.get("confidence", 1.0),
             "qa_passed": state.get("qa_passed", True),
