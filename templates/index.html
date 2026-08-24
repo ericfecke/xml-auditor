@@ -476,7 +476,9 @@ async function probeFeed() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(lastInputPayload),
     });
-    const data = await resp.json();
+    const rawText = await resp.text();
+    let data;
+    try { data = JSON.parse(rawText); } catch (_) { throw new Error(`Server error (HTTP ${resp.status})`); }
     probeData = data;
     setProbeStatus('');
     renderProbeResult(data);
@@ -609,7 +611,9 @@ async function runAnalysis(filtersOverride) {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
     });
-    const data = await resp.json();
+    const rawText = await resp.text();
+    let data;
+    try { data = JSON.parse(rawText); } catch (_) { throw new Error(`Server error (HTTP ${resp.status})`); }
 
     document.getElementById('analyze-status').textContent = '';
     document.getElementById('btn-analyze').disabled = false;

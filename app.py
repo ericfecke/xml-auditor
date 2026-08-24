@@ -20,52 +20,53 @@ def index():
 
 @app.route("/api/probe", methods=["POST"])
 def probe():
-    data = request.get_json(force=True) or {}
-    url = data.get("url") or None
-    xml_text = data.get("xml_text") or None
+    try:
+        data = request.get_json(force=True) or {}
+        url = data.get("url") or None
+        xml_text = data.get("xml_text") or None
 
-    state = orchestrator.probe_feed(url=url, xml_text=xml_text)
+        state = orchestrator.probe_feed(url=url, xml_text=xml_text)
 
-    return jsonify({
-        "root_tag": state.get("root_tag", ""),
-        "is_gzip": state.get("is_gzip", False),
-        "parent_candidates": state.get("parent_candidates", {}),
-        "field_candidates": state.get("field_candidates", {}),
-        "tag_inventory": state.get("tag_inventory", {}),
-        "errors": state.get("errors", []),
-    })
+        return jsonify({
+            "root_tag": state.get("root_tag", ""),
+            "is_gzip": state.get("is_gzip", False),
+            "parent_candidates": state.get("parent_candidates", {}),
+            "field_candidates": state.get("field_candidates", {}),
+            "tag_inventory": state.get("tag_inventory", {}),
+            "errors": state.get("errors", []),
+        })
+    except Exception as exc:
+        return jsonify({"errors": [{"agent": "probe", "message": str(exc), "severity": "error"}]}), 500
 
 
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
-    data = request.get_json(force=True) or {}
-    url = data.get("url") or None
-    xml_text = data.get("xml_text") or None
-    parent_tag = data.get("parent_tag", "")
-    field_map = data.get("field_map") or {}
-    filters = data.get("filters") or {}
+    try:
+        data = request.get_json(force=True) or {}
+        url = data.get("url") or None
+        xml_text = data.get("xml_text") or None
+        parent_tag = data.get("parent_tag", "")
+        field_map = data.get("field_map") or {}
+        filters = data.get("filters") or {}
 
-    state = orchestrator.run_pipeline(
-        url=url,
-        xml_text=xml_text,
-        parent_tag=parent_tag,
-        field_map=field_map,
-        filters=filters,
-    )
+        state = orchestrator.run_pipeline(
+            url=url,
+            xml_text=xml_text,
+            parent_tag=parent_tag,
+            field_map=field_map,
+            filters=filters,
+        )
 
-    # Strip all_rows before sending to frontend — kept server-side for export
-    cards = {}
-    for card_id, card in state.get("cards", {}).items():
-        cards[card_id] = {k: v for k, v in card.items() if k != "all_rows"}
-
-    return jsonify({
-        "node_count": state.get("node_count", 0),
-        "cards": cards,
-        "qa_flags": state.get("qa_flags", []),
-        "confidence": state.get("confidence", 1.0),
-        "qa_passed": state.get("qa_passed", True),
-        "errors": state.get("errors", []),
-    })
+        return jsonify({
+            "node_count": state.get("node_count", 0),
+            "cards": state.get("cards", {}),
+            "qa_flags": state.get("qa_flags", []),
+            "confidence": state.get("confidence", 1.0),
+            "qa_passed": state.get("qa_passed", True),
+            "errors": state.get("errors", []),
+        })
+    except Exception as exc:
+        return jsonify({"errors": [{"agent": "analyze", "message": str(exc), "severity": "error"}]}), 500
 
 
 @app.route("/api/export_csv", methods=["POST"])
