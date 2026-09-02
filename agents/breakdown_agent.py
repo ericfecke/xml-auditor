@@ -41,6 +41,7 @@ def run(state, parent_tag, field_map, filters=None):
         city_cpa_acc    = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         country_acc     = defaultdict(int)
         cpc_dist_acc    = defaultdict(int)
+        cpa_dist_acc    = defaultdict(int)
         url_acc         = defaultdict(int)
         url2_acc        = defaultdict(int)
         node_count      = 0
@@ -89,6 +90,8 @@ def run(state, parent_tag, field_map, filters=None):
 
             if cpc is not None:
                 cpc_dist_acc[cpc] += 1
+            if cpa is not None:
+                cpa_dist_acc[cpa] += 1
 
             if url_val:
                 url_acc[url_val] += 1
@@ -117,6 +120,7 @@ def run(state, parent_tag, field_map, filters=None):
         cards["company_cpc"] = _build_card("company_cpc", "Company × CPC",    company_cpc_acc, "avg_cpc", cap=25)
         cards["company_cpa"] = _build_card("company_cpa", "Company × CPA",    company_cpa_acc, "avg_cpa", cap=25)
         cards["cpc_dist"]    = _build_cpc_dist(cpc_dist_acc)
+        cards["cpa_dist"]    = _build_cpa_dist(cpa_dist_acc)
         cards["total_count"] = {
             "id": "total_count", "label": "Total Node Count",
             "type": "stat", "value": node_count,
@@ -270,6 +274,21 @@ def _build_cpc_dist(acc):
         r["pct_of_total"] = round(r["count"] / total * 100, 1) if total > 0 else 0.0
     return {
         "id": "cpc_dist", "label": "CPC Value Distribution",
+        "total_unique": len(rows), "capped": False,
+        "rows": rows, "all_rows": rows,
+    }
+
+
+def _build_cpa_dist(acc):
+    rows = sorted(
+        [{"cpa_value": v, "count": c} for v, c in acc.items()],
+        key=lambda r: r["cpa_value"],
+    )
+    total = sum(r["count"] for r in rows)
+    for r in rows:
+        r["pct_of_total"] = round(r["count"] / total * 100, 1) if total > 0 else 0.0
+    return {
+        "id": "cpa_dist", "label": "CPA Value Distribution",
         "total_unique": len(rows), "capped": False,
         "rows": rows, "all_rows": rows,
     }

@@ -192,6 +192,7 @@
   .card-meta { font-size: 10px; color: var(--text-dim); }
 
   .card-body { padding: 10px 12px; }
+  .card-body-sm { padding: 10px 12px; max-height: 220px; overflow-y: auto; }
 
   /* Stat card */
   .stat-value {
@@ -778,7 +779,7 @@ function renderCards(cards) {
   const grid = document.getElementById('cards-grid');
   grid.innerHTML = '';
 
-  const ORDER = ['total_count','title_cpc','title_cpa','company_cpc','company_cpa','city_cpc','city_cpa','country_count','cpc_dist','url_list','url_list2'];
+  const ORDER = ['total_count','title_cpc','title_cpa','company_cpc','company_cpa','city_cpc','city_cpa','country_count','cpc_dist','cpa_dist','url_list','url_list2'];
 
   ORDER.forEach(id => {
     const card = cards[id];
@@ -820,6 +821,21 @@ function buildCardEl(card) {
           ${rows.map(r => `
             <tr>
               <td class="num">${r.cpc_value != null ? r.cpc_value.toFixed(4) : '—'}</td>
+              <td class="num">${(r.count||0).toLocaleString()}</td>
+              <td class="num">${r.pct_of_total != null ? r.pct_of_total.toFixed(1) + '%' : '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } else if (card.id === 'cpa_dist') {
+    tableHtml = `
+      <table>
+        <thead><tr><th>CPA Value</th><th style="text-align:right">Count</th><th style="text-align:right">% of Total</th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td class="num">${r.cpa_value != null ? r.cpa_value.toFixed(4) : '—'}</td>
               <td class="num">${(r.count||0).toLocaleString()}</td>
               <td class="num">${r.pct_of_total != null ? r.pct_of_total.toFixed(1) + '%' : '—'}</td>
             </tr>
@@ -905,7 +921,7 @@ function buildCardEl(card) {
         <button class="btn btn-sm btn-ghost" onclick="exportCard('${card.id}')">Export CSV (all ${(card.total_unique||rows.length).toLocaleString()})</button>
       </div>
     </div>
-    <div class="card-body" style="padding:0;overflow-x:auto;">
+    <div class="${(card.id === 'cpc_dist' || card.id === 'cpa_dist') ? 'card-body-sm' : 'card-body'}" style="padding:0;overflow-x:auto;">
       ${tableHtml}
     </div>
   `;
