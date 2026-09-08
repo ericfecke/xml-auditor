@@ -613,15 +613,7 @@ async function runAnalysis(filtersOverride) {
       body: JSON.stringify(body),
     });
 
-    let data;
-    const ct = resp.headers.get('content-type') || '';
-    if (ct.includes('text/event-stream')) {
-      data = await readSSEResult(resp.body);
-    } else {
-      // fallback: plain JSON (e.g. request-parsing error from server)
-      const rawText = await resp.text();
-      try { data = JSON.parse(rawText); } catch (_) { throw new Error(`Server error (HTTP ${resp.status})`); }
-    }
+    const data = await readSSEResult(resp.body);
 
     document.getElementById('analyze-status').textContent = '';
     document.getElementById('btn-analyze').disabled = false;

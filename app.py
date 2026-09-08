@@ -52,7 +52,12 @@ def analyze():
         field_map = data.get("field_map") or {}
         filters = data.get("filters") or {}
     except Exception as exc:
-        return jsonify({"errors": [{"agent": "analyze", "message": str(exc), "severity": "error"}]}), 500
+        err = json.dumps({"errors": [{"agent": "analyze", "message": str(exc), "severity": "error"}]})
+        return Response(
+            f"data: {err}\n\n",
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     result_q = queue.Queue()
 
