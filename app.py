@@ -1,6 +1,9 @@
 import csv
 import io
+import json
 import os
+import queue
+import threading
 
 from flask import Flask, Response, jsonify, render_template, request
 
@@ -48,29 +51,55 @@ def analyze():
         parent_tag = data.get("parent_tag", "")
         field_map = data.get("field_map") or {}
         filters = data.get("filters") or {}
-
-        state = orchestrator.run_pipeline(
-            url=url,
-            xml_text=xml_text,
-            parent_tag=parent_tag,
-            field_map=field_map,
-            filters=filters,
-        )
-
-        cards = {}
-        for card_id, card in state.get("cards", {}).items():
-            cards[card_id] = {k: v for k, v in card.items() if k != "all_rows"}
-
-        return jsonify({
-            "node_count": state.get("node_count", 0),
-            "cards": cards,
-            "qa_flags": state.get("qa_flags", []),
-            "confidence": state.get("confidence", 1.0),
-            "qa_passed": state.get("qa_passed", True),
-            "errors": state.get("errors", []),
-        })
     except Exception as exc:
         return jsonify({"errors": [{"agent": "analyze", "message": str(exc), "severity": "error"}]}), 500
+
+    result_q = queue.Queue()
+
+    def _run():
+        try:
+            state = orchestrator.run_pipeline(
+                url=url, xml_text=xml_text,
+                parent_tag=parent_tag, field_map=field_map, filters=filters,
+            )
+            result_q.put(("ok", state))
+        except Exception as exc:
+            result_q.put(("error", str(exc)))
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    def generate():
+        while True:
+            try:
+                kind, payload = result_q.get(timeout=5)
+                if kind == "ok":
+                    state = payload
+                    cards = {
+                        cid: {k: v for k, v in card.items() if k != "all_rows"}
+                        for cid, card in state.get("cards", {}).items()
+                    }
+                    body = json.dumps({
+                        "node_count": state.get("node_count", 0),
+                        "cards": cards,
+                        "qa_flags": state.get("qa_flags", []),
+                        "confidence": state.get("confidence", 1.0),
+                        "qa_passed": state.get("qa_passed", True),
+                        "errors": state.get("errors", []),
+                    })
+                else:
+                    body = json.dumps({
+                        "errors": [{"agent": "analyze", "message": payload, "severity": "error"}]
+                    })
+                yield f"data: {body}\n\n"
+                return
+            except queue.Empty:
+                yield ": heartbeat\n\n"
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/export_csv", methods=["POST"])
