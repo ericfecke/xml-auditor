@@ -419,7 +419,8 @@ let selectedParent = null;
 let probeData = null;
 let lastInputPayload = null;   // {url?, xml_text?}
 let lastAnalysisParams = null; // {url?, xml_text?, parent_tag, field_map} — for export
-let lastCards = {};            // full card data including all_rows — for CSV export
+let lastCards = {};            // card data from most recent analysis (may be filtered)
+let baseCards = {};            // card data from last unfiltered analysis — source of truth for filter dropdowns
 let activeFilters = {};        // {field_key: value} — at most one entry for now
 
 const TITLE_ALIASES   = ['title','job_title','jobtitle','position','job_name'];
@@ -620,6 +621,7 @@ async function runAnalysis(filtersOverride) {
     document.getElementById('panel-results').classList.remove('hidden');
 
     lastCards = data.cards || {};
+    if (!Object.keys(activeFilters).length) baseCards = lastCards;
     renderQA(data);
     renderCards(lastCards);
     renderFilterBar();
@@ -715,7 +717,7 @@ function _populateFilterValues(fieldKey, selectedVal) {
   const applyBtn = document.getElementById('btn-apply-filter');
 
   const fieldInfo = FILTER_FIELDS.find(f => f.key === fieldKey);
-  const card = fieldInfo && lastCards[fieldInfo.cardId];
+  const card = fieldInfo && (baseCards[fieldInfo.cardId] || lastCards[fieldInfo.cardId]);
   const rows = (card && (card.all_rows || card.rows)) || [];
 
   valueSel.innerHTML = '<option value="">— value —</option>';
