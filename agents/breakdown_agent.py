@@ -60,7 +60,7 @@ def run(state, parent_tag, field_map, filters=None):
             country_val = _get_text(node, country_tag) if country_tag else None
 
             if filters and not _matches_filters(filters, {
-                "title": title, "company": company, "city": city_val,
+                "title": title, "company": company, "city": city_val, "country": country_val,
             }):
                 continue
 
