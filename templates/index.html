@@ -194,14 +194,20 @@
   .card-body { padding: 10px 12px; }
   .card-body-sm { padding: 10px 12px; max-height: 220px; overflow-y: auto; }
 
-  /* Stat card */
+  /* Stat card — thin full-width bar */
+  .stat-bar {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 12px;
+  }
   .stat-value {
-    font-size: 48px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--accent);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
   }
-  .stat-label { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .stat-label { font-size: 11px; color: var(--text-dim); }
 
   /* Tables */
   table {
@@ -824,13 +830,12 @@ function buildCardEl(card) {
   div.className = 'card';
 
   if (card.type === 'stat') {
+    div.style.gridColumn = '1 / -1';
     div.innerHTML = `
-      <div class="card-header">
+      <div class="stat-bar">
         <span class="card-label">${escHtml(card.label)}</span>
-      </div>
-      <div class="card-body">
-        <div class="stat-value">${(card.value || 0).toLocaleString()}</div>
-        <div class="stat-label">total nodes</div>
+        <span class="stat-value">${(card.value || 0).toLocaleString()}</span>
+        <span class="stat-label">nodes</span>
       </div>
     `;
     return div;
