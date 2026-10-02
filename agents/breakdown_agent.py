@@ -33,13 +33,11 @@ def run(state, parent_tag, field_map, filters=None):
         city_tag    = field_map.get("city")    or ""
         country_tag = field_map.get("country") or ""
 
-        title_cpc_acc   = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
-        title_cpa_acc   = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
-        company_cpc_acc = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
-        company_cpa_acc = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
-        city_cpc_acc    = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
-        city_cpa_acc    = defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
-        country_acc     = defaultdict(int)
+        _acc = lambda: defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
+        title_cpc_acc   = _acc(); title_cpa_acc   = _acc()
+        company_cpc_acc = _acc(); company_cpa_acc = _acc()
+        city_cpc_acc    = _acc(); city_cpa_acc    = _acc()
+        country_cpc_acc = _acc(); country_cpa_acc = _acc()
         cpc_dist_acc    = defaultdict(int)
         cpa_dist_acc    = defaultdict(int)
         url_acc         = defaultdict(int)
@@ -64,72 +62,41 @@ def run(state, parent_tag, field_map, filters=None):
             }):
                 continue
 
-            title_key   = title   or "(missing)"
-            company_key = company or "(missing)"
-            city_key    = city_val or "(missing)"
+            title_key   = title       or "(missing)"
+            company_key = company     or "(missing)"
+            city_key    = city_val    or "(missing)"
+            country_key = country_val or "(missing)"
 
-            title_cpc_acc[title_key]["count"] += 1
-            if cpc is not None:
-                title_cpc_acc[title_key]["sum"] += cpc
-                title_cpc_acc[title_key]["has_metric"] = True
-
-            title_cpa_acc[title_key]["count"] += 1
-            if cpa is not None:
-                title_cpa_acc[title_key]["sum"] += cpa
-                title_cpa_acc[title_key]["has_metric"] = True
-
-            company_cpc_acc[company_key]["count"] += 1
-            if cpc is not None:
-                company_cpc_acc[company_key]["sum"] += cpc
-                company_cpc_acc[company_key]["has_metric"] = True
-
-            company_cpa_acc[company_key]["count"] += 1
-            if cpa is not None:
-                company_cpa_acc[company_key]["sum"] += cpa
-                company_cpa_acc[company_key]["has_metric"] = True
-
-            if cpc is not None:
-                cpc_dist_acc[cpc] += 1
-            if cpa is not None:
-                cpa_dist_acc[cpa] += 1
-
-            if url_val:
-                url_acc[url_val] += 1
-            if url2_val:
-                url2_acc[url2_val] += 1
-
-            if country_tag and country_val:
-                country_acc[country_val] += 1
-
-            if city_tag:
-                city_cpc_acc[city_key]["count"] += 1
+            def _accum(cpc_a, cpa_a, key):
+                cpc_a[key]["count"] += 1
                 if cpc is not None:
-                    city_cpc_acc[city_key]["sum"] += cpc
-                    city_cpc_acc[city_key]["has_metric"] = True
-
-                city_cpa_acc[city_key]["count"] += 1
+                    cpc_a[key]["sum"] += cpc; cpc_a[key]["has_metric"] = True
+                cpa_a[key]["count"] += 1
                 if cpa is not None:
-                    city_cpa_acc[city_key]["sum"] += cpa
-                    city_cpa_acc[city_key]["has_metric"] = True
+                    cpa_a[key]["sum"] += cpa; cpa_a[key]["has_metric"] = True
+
+            _accum(title_cpc_acc,   title_cpa_acc,   title_key)
+            _accum(company_cpc_acc, company_cpa_acc, company_key)
+            if city_tag:    _accum(city_cpc_acc,    city_cpa_acc,    city_key)
+            if country_tag: _accum(country_cpc_acc, country_cpa_acc, country_key)
+
+            if cpc is not None: cpc_dist_acc[cpc] += 1
+            if cpa is not None: cpa_dist_acc[cpa] += 1
+            if url_val:  url_acc[url_val]   += 1
+            if url2_val: url2_acc[url2_val] += 1
 
         state["node_count"] = node_count
 
         cards = {}
-        cards["title_cpc"]   = _build_card("title_cpc",   "Job Title × CPC",  title_cpc_acc,   "avg_cpc", cap=25)
-        cards["title_cpa"]   = _build_card("title_cpa",   "Job Title × CPA",  title_cpa_acc,   "avg_cpa", cap=25)
-        cards["company_cpc"] = _build_card("company_cpc", "Company × CPC",    company_cpc_acc, "avg_cpc", cap=25)
-        cards["company_cpa"] = _build_card("company_cpa", "Company × CPA",    company_cpa_acc, "avg_cpa", cap=25)
-        cards["cpc_dist"]    = _build_cpc_dist(cpc_dist_acc)
-        cards["cpa_dist"]    = _build_cpa_dist(cpa_dist_acc)
-        cards["total_count"] = {
-            "id": "total_count", "label": "Total Node Count",
-            "type": "stat", "value": node_count,
-        }
+        cards["total_count"] = {"id": "total_count", "label": "Total Node Count", "type": "stat", "value": node_count}
+        cards["title"]   = _build_combined_card("title",   "Job Title", title_cpc_acc,   title_cpa_acc)
+        cards["company"] = _build_combined_card("company", "Company",   company_cpc_acc, company_cpa_acc)
+        cards["cpc_dist"] = _build_cpc_dist(cpc_dist_acc)
+        cards["cpa_dist"] = _build_cpa_dist(cpa_dist_acc)
         if city_tag:
-            cards["city_cpc"] = _build_card("city_cpc", "City × CPC", city_cpc_acc, "avg_cpc", cap=25)
-            cards["city_cpa"] = _build_card("city_cpa", "City × CPA", city_cpa_acc, "avg_cpa", cap=25)
+            cards["city"]    = _build_combined_card("city",    "City",    city_cpc_acc,    city_cpa_acc)
         if country_tag:
-            cards["country_count"] = _build_count_card("country_count", "Country × Count", country_acc)
+            cards["country"] = _build_combined_card("country", "Country", country_cpc_acc, country_cpa_acc)
         if url_tag:
             cards["url_list"]  = _build_url_card("url_list",  "Job URL",   url_acc)
         if url2_tag:
@@ -261,6 +228,29 @@ def _build_card(card_id, label, acc, metric_key, cap):
         "total_unique": total_unique, "capped": capped,
         "rows":     rows_raw[:cap] if capped else rows_raw,  # display (capped)
         "all_rows": rows_raw,                                 # export (full)
+    }
+
+
+def _build_combined_card(card_id, label, cpc_acc, cpa_acc, cap=25):
+    """Single card with Value | Count | Avg CPC | Avg CPA columns."""
+    keys = set(cpc_acc.keys()) | set(cpa_acc.keys())
+    rows_raw = []
+    for key in keys:
+        cpc_data = cpc_acc.get(key, {"count": 0, "sum": 0.0, "has_metric": False})
+        cpa_data = cpa_acc.get(key, {"count": 0, "sum": 0.0, "has_metric": False})
+        count = cpc_data["count"] or cpa_data["count"]
+        avg_cpc = round(cpc_data["sum"] / count, 4) if cpc_data["has_metric"] and count > 0 else None
+        avg_cpa = round(cpa_data["sum"] / count, 4) if cpa_data["has_metric"] and count > 0 else None
+        rows_raw.append({"value": key, "count": count, "avg_cpc": avg_cpc, "avg_cpa": avg_cpa})
+
+    rows_raw.sort(key=lambda r: r["count"], reverse=True)
+    total_unique = len(rows_raw)
+    capped = cap is not None and total_unique > cap
+    return {
+        "id": card_id, "label": label, "type": "combined",
+        "total_unique": total_unique, "capped": capped,
+        "rows":     rows_raw[:cap] if capped else rows_raw,
+        "all_rows": rows_raw,
     }
 
 
