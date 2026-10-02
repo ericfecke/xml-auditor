@@ -32,12 +32,14 @@ def run(state, parent_tag, field_map, filters=None):
         url2_tag    = field_map.get("url2")    or ""
         city_tag    = field_map.get("city")    or ""
         country_tag = field_map.get("country") or ""
+        other_tag   = field_map.get("other")   or ""
 
         _acc = lambda: defaultdict(lambda: {"count": 0, "sum": 0.0, "has_metric": False})
         title_cpc_acc   = _acc(); title_cpa_acc   = _acc()
         company_cpc_acc = _acc(); company_cpa_acc = _acc()
         city_cpc_acc    = _acc(); city_cpa_acc    = _acc()
         country_cpc_acc = _acc(); country_cpa_acc = _acc()
+        other_cpc_acc   = _acc(); other_cpa_acc   = _acc()
         cpc_dist_acc    = defaultdict(int)
         cpa_dist_acc    = defaultdict(int)
         url_acc         = defaultdict(int)
@@ -56,9 +58,11 @@ def run(state, parent_tag, field_map, filters=None):
             url2_val    = _get_text(node, url2_tag)    if url2_tag    else None
             city_val    = _get_text(node, city_tag)    if city_tag    else None
             country_val = _get_text(node, country_tag) if country_tag else None
+            other_val   = _get_text(node, other_tag)   if other_tag   else None
 
             if filters and not _matches_filters(filters, {
-                "title": title, "company": company, "city": city_val, "country": country_val,
+                "title": title, "company": company, "city": city_val,
+                "country": country_val, "other": other_val,
             }):
                 continue
 
@@ -66,6 +70,7 @@ def run(state, parent_tag, field_map, filters=None):
             company_key = company     or "(missing)"
             city_key    = city_val    or "(missing)"
             country_key = country_val or "(missing)"
+            other_key   = other_val   or "(missing)"
 
             def _accum(cpc_a, cpa_a, key):
                 cpc_a[key]["count"] += 1
@@ -79,6 +84,7 @@ def run(state, parent_tag, field_map, filters=None):
             _accum(company_cpc_acc, company_cpa_acc, company_key)
             if city_tag:    _accum(city_cpc_acc,    city_cpa_acc,    city_key)
             if country_tag: _accum(country_cpc_acc, country_cpa_acc, country_key)
+            if other_tag:   _accum(other_cpc_acc,   other_cpa_acc,   other_key)
 
             if cpc is not None: cpc_dist_acc[cpc] += 1
             if cpa is not None: cpa_dist_acc[cpa] += 1
@@ -97,6 +103,8 @@ def run(state, parent_tag, field_map, filters=None):
             cards["city"]    = _build_combined_card("city",    "City",    city_cpc_acc,    city_cpa_acc)
         if country_tag:
             cards["country"] = _build_combined_card("country", "Country", country_cpc_acc, country_cpa_acc)
+        if other_tag:
+            cards["other"]   = _build_combined_card("other", other_tag, other_cpc_acc, other_cpa_acc)
         if url_tag:
             cards["url_list"]  = _build_url_card("url_list",  "Job URL",   url_acc)
         if url2_tag:

@@ -375,6 +375,10 @@
           <label>URL field 2</label>
           <select id="map-url2"><option value="">— none —</option></select>
         </div>
+        <div class="field-group">
+          <label>Other field</label>
+          <select id="map-other"><option value="">— none —</option></select>
+        </div>
       </div>
     </div>
 
@@ -544,6 +548,7 @@ function renderProbeResult(data) {
   populateDropdown('map-country',  fieldTags, COUNTRY_ALIASES);
   populateDropdown('map-url',      fieldTags, URL_ALIASES);
   populateDropdown('map-url2',     fieldTags, URL2_ALIASES);
+  populateDropdown('map-other',    fieldTags, []);
 
   // Info line
   const gzip = data.is_gzip ? ' (gzip)' : '';
@@ -592,6 +597,7 @@ async function runAnalysis(filtersOverride) {
     country: document.getElementById('map-country').value || null,
     url:     document.getElementById('map-url').value     || null,
     url2:    document.getElementById('map-url2').value    || null,
+    other:   document.getElementById('map-other').value   || null,
   };
 
   document.getElementById('analyze-status').textContent = 'Analyzing…';
@@ -668,6 +674,7 @@ const FILTER_FIELDS = [
   {key: 'company', label: 'Company', cardId: 'company'},
   {key: 'city',    label: 'City',    cardId: 'city'},
   {key: 'country', label: 'Country', cardId: 'country'},
+  {key: 'other',   label: 'Other',   cardId: 'other'},
 ];
 
 function renderFilterBar() {
@@ -809,7 +816,7 @@ function renderCards(cards) {
   const grid = document.getElementById('cards-grid');
   grid.innerHTML = '';
 
-  const ORDER = ['total_count','title','company','city','country','cpc_dist','cpa_dist','url_list','url_list2'];
+  const ORDER = ['total_count','title','company','city','country','other','cpc_dist','cpa_dist','url_list','url_list2'];
 
   ORDER.forEach(id => {
     const card = cards[id];
@@ -900,6 +907,7 @@ function buildCardEl(card) {
                      : card.id === 'company' ? 'Company'
                      : card.id === 'city' ? 'City'
                      : card.id === 'country' ? 'Country'
+                     : card.id === 'other' ? (card.label || 'Other')
                      : card.label || 'Value';
     tableHtml = `
       <table>
