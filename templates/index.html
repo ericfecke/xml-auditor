@@ -664,10 +664,10 @@ async function readSSEResult(body) {
 // ---------------------------------------------------------------------------
 
 const FILTER_FIELDS = [
-  {key: 'title',   label: 'Title',   cardId: 'title_cpc'},
-  {key: 'company', label: 'Company', cardId: 'company_cpc'},
-  {key: 'city',    label: 'City',    cardId: 'city_cpc'},
-  {key: 'country', label: 'Country', cardId: 'country_count'},
+  {key: 'title',   label: 'Title',   cardId: 'title'},
+  {key: 'company', label: 'Company', cardId: 'company'},
+  {key: 'city',    label: 'City',    cardId: 'city'},
+  {key: 'country', label: 'Country', cardId: 'country'},
 ];
 
 function renderFilterBar() {
@@ -809,7 +809,7 @@ function renderCards(cards) {
   const grid = document.getElementById('cards-grid');
   grid.innerHTML = '';
 
-  const ORDER = ['total_count','title_cpc','title_cpa','company_cpc','company_cpa','city_cpc','city_cpa','country_count','cpc_dist','cpa_dist','url_list','url_list2'];
+  const ORDER = ['total_count','title','company','city','country','cpc_dist','cpa_dist','url_list','url_list2'];
 
   ORDER.forEach(id => {
     const card = cards[id];
@@ -873,20 +873,6 @@ function buildCardEl(card) {
         </tbody>
       </table>
     `;
-  } else if (card.id === 'country_count') {
-    tableHtml = `
-      <table>
-        <thead><tr><th>Country</th><th style="text-align:right">Count</th></tr></thead>
-        <tbody>
-          ${rows.map(r => `
-            <tr>
-              <td>${escHtml(r.value || '—')}</td>
-              <td class="num">${(r.count||0).toLocaleString()}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
   } else if (card.id === 'url_list' || card.id === 'url_list2') {
     tableHtml = `
       <table>
@@ -909,32 +895,31 @@ function buildCardEl(card) {
       </table>
     `;
   } else {
-    const isTitle = card.id.startsWith('title');
-    const isCompany = card.id.startsWith('company');
-    const isCity = card.id.startsWith('city');
-    const metricKey = card.id.endsWith('_cpc') ? 'avg_cpc' : 'avg_cpa';
-    const metricLabel = metricKey === 'avg_cpc' ? 'Avg CPC' : 'Avg CPA';
-    const valueLabel = isTitle ? 'Title' : isCompany ? 'Company' : isCity ? 'City' : 'Value';
-
+    // combined card: Value | Count | Avg CPC | Avg CPA
+    const valueLabel = card.id === 'title' ? 'Title'
+                     : card.id === 'company' ? 'Company'
+                     : card.id === 'city' ? 'City'
+                     : card.id === 'country' ? 'Country'
+                     : card.label || 'Value';
     tableHtml = `
       <table>
         <thead>
           <tr>
             <th>${valueLabel}</th>
             <th style="text-align:right">Count</th>
-            <th style="text-align:right">${metricLabel}</th>
+            <th style="text-align:right">Avg CPC</th>
+            <th style="text-align:right">Avg CPA</th>
           </tr>
         </thead>
         <tbody>
           ${rows.map(r => {
-            const metricVal = r[metricKey];
-            const metricDisplay = metricVal != null ? metricVal.toFixed(4) : '—';
             const isMissing = r.value === '(missing)';
             return `
               <tr>
                 <td class="${isMissing ? 'dim' : ''}">${escHtml(r.value || '')}</td>
                 <td class="num">${(r.count||0).toLocaleString()}</td>
-                <td class="num ${metricVal == null ? 'dim' : ''}">${metricDisplay}</td>
+                <td class="num ${r.avg_cpc == null ? 'dim' : ''}">${r.avg_cpc != null ? r.avg_cpc.toFixed(4) : '—'}</td>
+                <td class="num ${r.avg_cpa == null ? 'dim' : ''}">${r.avg_cpa != null ? r.avg_cpa.toFixed(4) : '—'}</td>
               </tr>
             `;
           }).join('')}
